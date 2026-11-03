@@ -57,6 +57,7 @@ from slipsurface.pile.engine import analyse
 from slipsurface.pile.optimizer import optimize_length, optimize_cost
 from slipsurface.pile.plotting import Plotter, PLOT_KEYS
 from slipsurface.pile import APP_NAME, __version__
+from slipsurface.ui.interpret import InterpretWindow
 
 
 def light_palette() -> QPalette:
@@ -160,6 +161,20 @@ class PileWindow(QMainWindow):
 
         self._build_menu()
         self._build_toolbar()
+        self._build_docks()
+        self.interpret = None
+
+    def _build_docks(self):
+        from PySide6.QtWidgets import QDockWidget
+        # Input dock (already central, but we can add a results dock hint)
+        dock = QDockWidget("Quick Info", self)
+        dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        info = QTextEdit()
+        info.setReadOnly(True)
+        info.setPlainText("Enter data on the left.\nAnalyse → then open Interpret for full results and plots.")
+        dock.setWidget(info)
+        self.addDockWidget(Qt.RightDockWidgetArea, dock)
+        self.info_dock = info
 
     def _build_toolbar(self):
         tb = QToolBar("Main")
@@ -169,8 +184,19 @@ class PileWindow(QMainWindow):
         act_analyse.triggered.connect(self.run_analysis)
         act_opt = QAction("Optimize L", self)
         act_opt.triggered.connect(self.run_optimize_length)
+        act_interpret = QAction("Interpret", self)
+        act_interpret.triggered.connect(self.open_interpret)
+        act_open = QAction("Open", self)
+        act_open.triggered.connect(self.open_project)
+        act_save = QAction("Save", self)
+        act_save.triggered.connect(self.save_project)
+        tb.addAction(act_open)
+        tb.addAction(act_save)
+        tb.addSeparator()
         tb.addAction(act_analyse)
         tb.addAction(act_opt)
+        tb.addSeparator()
+        tb.addAction(act_interpret)
 
     def _build_menu(self):
         menu = self.menuBar()
@@ -193,6 +219,11 @@ class PileWindow(QMainWindow):
         tr_act.triggered.connect(lambda: self.set_language("tr"))
         lang_menu.addAction(en_act)
         lang_menu.addAction(tr_act)
+
+        view_menu = menu.addMenu("&View")
+        interp_act = QAction("&Interpret Window", self)
+        interp_act.triggered.connect(self.open_interpret)
+        view_menu.addAction(interp_act)
 
     def set_language(self, lang: str):
         self.lang = lang
@@ -360,8 +391,21 @@ class PileWindow(QMainWindow):
             self.btn_report.setEnabled(True)
             self.status.showMessage("Analysis complete")
             self._update_plot()
+            if self.interpret is not None:
+                self.interpret.set_analysis(self.last_result, self.lang)
         except Exception as e:
             QMessageBox.critical(self, "Analysis error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
+
+    def open_interpret(self):
+        if self.interpret is None or not self.interpret.isVisible():
+            self.interpret = InterpretWindow(self)
+        if hasattr(self, "last_result"):
+            self.interpret.set_analysis(self.last_result, self.lang)
+        else:
+            self.interpret.summary.setPlainText("Run an analysis first.")
+        self.interpret.show()
+        self.interpret.raise_()
+        self.interpret.activateWindow()
 
     def _update_plot(self):
         if not HAS_MPL or not hasattr(self, "last_result"):

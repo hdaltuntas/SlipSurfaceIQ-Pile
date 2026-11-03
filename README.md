@@ -13,8 +13,9 @@ Standalone desktop program extracted from SlipSurfaceIQ-Suite, with a light PySi
 - Parametric / reliability studies
 - **Automatic optimization** (differential evolution)
 - **Interactive plots** (section, profile, methods, length curve, group, settlement, seismic)
-- LE-style desktop GUI (Fusion, light palette, menus, toolbar, summary + plots tabs)
-- English / Turkish interface
+- LE-style desktop GUI (Fusion, light palette, menus, toolbar, docks)
+- Separate **Interpret** window for results and plots
+- Interactive plots (section, profile, methods, length, group, settlement, seismic)
 - Project save/load (.pile.json)
 
 ## Installation and start-up
