@@ -200,6 +200,14 @@ class PileWindow(QMainWindow):
         act_settings.triggered.connect(self.show_settings)
         act_help = QAction(icon("help"), "Help", self)
         act_help.triggered.connect(self.show_help)
+        act_lang = QAction(icon("language"), "Language", self)
+        act_lang.triggered.connect(self.toggle_language)
+        act_refresh = QAction(icon("refresh"), "Refresh Plot", self)
+        act_refresh.triggered.connect(self._update_plot)
+        act_export = QAction(icon("export"), "Export Plot", self)
+        act_export.triggered.connect(self.export_plot)
+        act_quit = QAction(icon("quit"), "Quit", self)
+        act_quit.triggered.connect(self.close)
         tb.addAction(act_new)
         tb.addAction(act_open)
         tb.addAction(act_save)
@@ -209,8 +217,14 @@ class PileWindow(QMainWindow):
         tb.addAction(act_interpret)
         tb.addSeparator()
         tb.addAction(act_report)
+        tb.addAction(act_refresh)
+        tb.addAction(act_export)
+        tb.addSeparator()
         tb.addAction(act_settings)
         tb.addAction(act_help)
+        tb.addAction(act_lang)
+        tb.addSeparator()
+        tb.addAction(act_quit)
 
     def _build_menu(self):
         menu = self.menuBar()
@@ -427,7 +441,17 @@ class PileWindow(QMainWindow):
             "Optimization parameters: set in the Optimize L dialog."
         )
 
-    def show_help(self):
+    def toggle_language(self):
+        self.set_language("tr" if self.lang == "en" else "en")
+
+    def export_plot(self):
+        if not HAS_MPL or not hasattr(self, "fig"):
+            QMessageBox.information(self, "Export", "No plot available.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Export plot", "plot.png", "PNG (*.png);;PDF (*.pdf)")
+        if path:
+            self.fig.savefig(path, dpi=150, bbox_inches="tight")
+            self.status.showMessage(f"Plot saved to {path}")
         QMessageBox.information(
             self, "Help",
             f"{APP_NAME} {__version__}\n\n"

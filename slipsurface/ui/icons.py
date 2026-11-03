@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 
 INK = QColor("#2d3a4a")
 BLUE = QColor("#2f6fd6")
@@ -106,6 +106,35 @@ def _pixmap(name: str, size: int = 32) -> QPixmap:
         p.setPen(_pen(QColor("#d23b2f"), 5))
         p.drawLine(QPointF(18, 18), QPointF(46, 46))
         p.drawLine(QPointF(46, 18), QPointF(18, 46))
+    elif name == "language":
+        p.setPen(_pen(BLUE, 4))
+        p.setBrush(Qt.NoBrush)
+        p.drawEllipse(QPointF(32, 32), 16, 16)
+        p.drawLine(QPointF(16, 32), QPointF(48, 32))
+        p.drawArc(QRectF(20, 16, 24, 32), 0, 180 * 16)
+        p.drawArc(QRectF(20, 16, 24, 32), 180 * 16, 180 * 16)
+    elif name == "refresh":
+        p.setPen(_pen(GREEN, 4))
+        p.setBrush(Qt.NoBrush)
+        p.drawArc(QRectF(16, 16, 32, 32), 45 * 16, 270 * 16)
+        p.setBrush(GREEN)
+        path = QPainterPath()
+        path.moveTo(44, 20)
+        path.lineTo(52, 28)
+        path.lineTo(36, 28)
+        path.closeSubpath()
+        p.drawPath(path)
+    elif name == "export":
+        p.setPen(_pen(INK, 4))
+        p.setBrush(QColor(255, 255, 255, 200))
+        p.drawRoundedRect(QRectF(14, 18, 28, 28), 3, 3)
+        p.setPen(_pen(BLUE, 4))
+        p.drawLine(QPointF(32, 14), QPointF(32, 36))
+        p.drawLine(QPointF(24, 28), QPointF(32, 36))
+        p.drawLine(QPointF(40, 28), QPointF(32, 36))
+    else:
+        p.setPen(_pen(INK, 4))
+        p.drawRect(QRectF(16, 16, 32, 32))
 
     p.end()
     return pm
