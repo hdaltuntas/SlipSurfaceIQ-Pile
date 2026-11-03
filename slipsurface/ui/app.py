@@ -58,6 +58,7 @@ from slipsurface.pile.optimizer import optimize_length, optimize_cost
 from slipsurface.pile.plotting import Plotter, PLOT_KEYS
 from slipsurface.pile import APP_NAME, __version__
 from slipsurface.ui.interpret import InterpretWindow
+from slipsurface.ui.icons import icon
 
 
 def light_palette() -> QPalette:
@@ -179,17 +180,18 @@ class PileWindow(QMainWindow):
     def _build_toolbar(self):
         tb = QToolBar("Main")
         tb.setObjectName("main_toolbar")
+        tb.setIconSize(tb.iconSize())  # keep default or set explicitly
         self.addToolBar(tb)
-        act_analyse = QAction("Analyse", self)
-        act_analyse.triggered.connect(self.run_analysis)
-        act_opt = QAction("Optimize L", self)
-        act_opt.triggered.connect(self.run_optimize_length)
-        act_interpret = QAction("Interpret", self)
-        act_interpret.triggered.connect(self.open_interpret)
-        act_open = QAction("Open", self)
+        act_open = QAction(icon("open"), "Open", self)
         act_open.triggered.connect(self.open_project)
-        act_save = QAction("Save", self)
+        act_save = QAction(icon("save"), "Save", self)
         act_save.triggered.connect(self.save_project)
+        act_analyse = QAction(icon("analyse"), "Analyse", self)
+        act_analyse.triggered.connect(self.run_analysis)
+        act_opt = QAction(icon("optimize"), "Optimize L", self)
+        act_opt.triggered.connect(self.run_optimize_length)
+        act_interpret = QAction(icon("interpret"), "Interpret", self)
+        act_interpret.triggered.connect(self.open_interpret)
         tb.addAction(act_open)
         tb.addAction(act_save)
         tb.addSeparator()
