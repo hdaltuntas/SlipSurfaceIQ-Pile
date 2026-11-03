@@ -22,7 +22,11 @@ Python 3.10+ required. From the repository root:
 
 ```bash
 python -m pip install -r requirements.txt
-python main.py
+python main.py                  # GUI
+python main.py --check
+python main.py analyze examples/example.pile.json
+python main.py optimize-length examples/example.pile.json --popsize 12 --maxiter 25
+python main.py optimize-cost examples/example.pile.json
 ```
 
 Or check dependencies:
