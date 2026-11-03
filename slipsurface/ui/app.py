@@ -39,11 +39,23 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QDialog,
     QDialogButtonBox,
+    QToolBar,
 )
+
+# Matplotlib Qt canvas (available when PySide6 is installed)
+try:
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.figure import Figure
+    HAS_MPL = True
+except ImportError:
+    HAS_MPL = False
+    FigureCanvas = None
+    Figure = None
 
 from slipsurface.pile.forms import schema, defaults, to_config, from_config, project_file
 from slipsurface.pile.engine import analyse
 from slipsurface.pile.optimizer import optimize_length, optimize_cost
+from slipsurface.pile.plotting import Plotter, PLOT_KEYS
 from slipsurface.pile import APP_NAME, __version__
 
 
@@ -117,14 +129,48 @@ class PileWindow(QMainWindow):
         input_layout.addLayout(btn_row)
         splitter.addWidget(input_widget)
 
-        # Right: results
+        # Right: results (tabs: summary + plots) — LE-style
+        self.result_tabs = QTabWidget()
         self.results = QTextEdit()
         self.results.setReadOnly(True)
         self.results.setPlaceholderText("Analysis results will appear here…")
-        splitter.addWidget(self.results)
-        splitter.setSizes([500, 700])
+        self.result_tabs.addTab(self.results, "Summary")
+
+        # Plots tab
+        plot_widget = QWidget()
+        plot_layout = QVBoxLayout(plot_widget)
+        plot_top = QHBoxLayout()
+        plot_top.addWidget(QLabel("Figure:"))
+        self.plot_combo = QComboBox()
+        self.plot_combo.addItems(PLOT_KEYS)
+        self.plot_combo.currentTextChanged.connect(self._update_plot)
+        plot_top.addWidget(self.plot_combo)
+        plot_top.addStretch()
+        plot_layout.addLayout(plot_top)
+        if HAS_MPL:
+            self.fig = Figure(figsize=(6, 4), dpi=100)
+            self.canvas = FigureCanvas(self.fig)
+            plot_layout.addWidget(self.canvas)
+        else:
+            self.canvas = QLabel("Matplotlib Qt backend not available")
+            plot_layout.addWidget(self.canvas)
+        self.result_tabs.addTab(plot_widget, "Plots")
+        splitter.addWidget(self.result_tabs)
+        splitter.setSizes([480, 720])
 
         self._build_menu()
+        self._build_toolbar()
+
+    def _build_toolbar(self):
+        tb = QToolBar("Main")
+        tb.setObjectName("main_toolbar")
+        self.addToolBar(tb)
+        act_analyse = QAction("Analyse", self)
+        act_analyse.triggered.connect(self.run_analysis)
+        act_opt = QAction("Optimize L", self)
+        act_opt.triggered.connect(self.run_optimize_length)
+        tb.addAction(act_analyse)
+        tb.addAction(act_opt)
 
     def _build_menu(self):
         menu = self.menuBar()
@@ -313,8 +359,24 @@ class PileWindow(QMainWindow):
             self.results.setPlainText("\n".join(lines))
             self.btn_report.setEnabled(True)
             self.status.showMessage("Analysis complete")
+            self._update_plot()
         except Exception as e:
             QMessageBox.critical(self, "Analysis error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
+
+    def _update_plot(self):
+        if not HAS_MPL or not hasattr(self, "last_result"):
+            return
+        key = self.plot_combo.currentText()
+        try:
+            self.fig.clear()
+            plotter = Plotter(self.last_result, self.lang)
+            plotter.draw(key, self.fig)
+            self.canvas.draw()
+        except Exception as exc:
+            self.fig.clear()
+            ax = self.fig.add_subplot(111)
+            ax.text(0.5, 0.5, f"Plot error:\n{exc}", ha="center", va="center", transform=ax.transAxes)
+            self.canvas.draw()
 
     def run_optimize_length(self):
         dlg = QDialog(self)

@@ -7,12 +7,13 @@ Standalone desktop program extracted from SlipSurfaceIQ-Suite, with a light PySi
 ## Features
 
 - Layered soil profile with stresses, shaft friction (α, β, λ methods, SPT), base resistance (Meyerhof, Vesić, Janbu)
-- Group efficiency (Converse-Labarre, etc.) and block failure
+- Group efficiency and block failure
 - Single-pile and group settlement
-- Rock-socketed piles (side shear correlations, base, length, elastic settlement)
+- Rock-socketed piles
 - Parametric / reliability studies
-- **Automatic optimization** (differential evolution): shortest safe length or minimum-cost design (L and D)
-- PDF / HTML / DOCX reports
+- **Automatic optimization** (differential evolution)
+- **Interactive plots** (section, profile, methods, length curve, group, settlement, seismic)
+- LE-style desktop GUI (Fusion, light palette, menus, toolbar, summary + plots tabs)
 - English / Turkish interface
 - Project save/load (.pile.json)
 
