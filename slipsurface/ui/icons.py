@@ -1,9 +1,22 @@
-"""Simple vector toolbar icons for SlipSurfaceIQ Pile (LE-style, no external files)."""
+"""Toolbar icons for SlipSurfaceIQ Pile.
+
+Prefers SVG files in the icons/ folder when available;
+falls back to vector-drawn QIcons.
+"""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+
+_ICONS_DIR = Path(__file__).parent / "icons"
+
+INK = QColor("#2d3a4a")
+BLUE = QColor("#2f6fd6")
+GREEN = QColor("#2e9d4f")
+ORANGE = QColor("#f08a24")
 
 INK = QColor("#2d3a4a")
 BLUE = QColor("#2f6fd6")
@@ -141,6 +154,11 @@ def _pixmap(name: str, size: int = 32) -> QPixmap:
 
 
 def icon(name: str) -> QIcon:
+    """Return a QIcon, preferring an SVG file if present."""
+    svg = _ICONS_DIR / f"{name}.svg"
+    if svg.is_file():
+        return QIcon(str(svg))
+    # Fallback to vector drawing
     ic = QIcon()
     for s in (16, 24, 32, 48):
         ic.addPixmap(_pixmap(name, s))
