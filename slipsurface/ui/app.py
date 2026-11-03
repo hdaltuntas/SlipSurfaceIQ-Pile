@@ -102,7 +102,7 @@ class PileWindow(QMainWindow):
         btn_row = QHBoxLayout()
         self.btn_analyse = QPushButton("Analyse")
         self.btn_analyse.clicked.connect(self.run_analysis)
-        self.btn_report = QPushButton("Generate Report…")
+        self.btn_report = QPushButton("Save Results…")
         self.btn_report.clicked.connect(self.generate_report)
         self.btn_report.setEnabled(False)
         btn_row.addWidget(self.btn_analyse)
@@ -252,21 +252,28 @@ class PileWindow(QMainWindow):
                 vals[key] = widget.value()
             elif isinstance(widget, QLineEdit):
                 vals[key] = widget.text()
-        # soil
+        # soil profile — respect column kinds
         if self.soil_table is not None:
             rows = []
             cols = schema(self.lang)["soil"]["columns"]
             for r in range(self.soil_table.rowCount()):
                 row = {}
+                has_data = False
                 for c, col in enumerate(cols):
                     item = self.soil_table.item(r, c)
-                    text = item.text() if item else ""
-                    # try numeric
-                    try:
-                        row[col["key"]] = float(text) if text else 0.0
-                    except ValueError:
-                        row[col["key"]] = text
-                if any(row.values()):
+                    text = (item.text() if item else "").strip()
+                    key = col["key"]
+                    kind = col.get("kind", "text")
+                    if kind == "number":
+                        try:
+                            row[key] = float(text) if text else 0.0
+                        except ValueError:
+                            row[key] = 0.0
+                    else:
+                        row[key] = text
+                    if text:
+                        has_data = True
+                if has_data:
                     rows.append(row)
             vals["soil_profile"] = rows
         return vals
@@ -278,12 +285,26 @@ class PileWindow(QMainWindow):
             result = analyse(cfg)
             self.last_result = result
             self.last_cfg = cfg
-            # Pretty-print the analysis object
+            # User-friendly summary
+            lines = [
+                "=== Analysis Results ===",
+                f"Factor of Safety (FS): {getattr(result, 'FS', '—')}",
+                f"Ultimate Capacity Q: {getattr(result, 'Q', '—')} kN",
+                f"Required Length L_min: {getattr(result, 'L_min', '—')} m",
+                f"Pile Length L: {getattr(result, 'L', '—')} m",
+                f"Diameter D: {getattr(result, 'D', '—')} m",
+            ]
+            if hasattr(result, "warnings") and result.warnings:
+                lines.append("\nWarnings:")
+                for w in result.warnings:
+                    lines.append(f"  - {w}")
+            lines.append("\n--- Full data (for debugging) ---")
             try:
-                text = json.dumps(vars(result), indent=2, default=str, ensure_ascii=False)[:15000]
+                full = json.dumps(vars(result), indent=2, default=str, ensure_ascii=False)[:8000]
+                lines.append(full)
             except Exception:
-                text = str(result)
-            self.results.setPlainText(text)
+                lines.append(str(result))
+            self.results.setPlainText("\n".join(lines))
             self.btn_report.setEnabled(True)
             self.status.showMessage("Analysis complete")
         except Exception as e:
@@ -314,17 +335,19 @@ class PileWindow(QMainWindow):
             return
         try:
             data = json.loads(Path(path).read_text(encoding="utf-8"))
-            # simplistic: apply from_config if possible
-            if "config" in data:
+            if isinstance(data, dict) and "config" in data:
                 self.values = from_config(data["config"])
+            elif isinstance(data, dict):
+                # flat values or project file
+                self.values = data.get("values", data)
             else:
-                self.values = data
-            # rebuild UI with values — for brevity, reload language which resets then user re-enters
-            # better: implement apply later; for now notify
-            QMessageBox.information(self, "Open", "Project loaded (basic). Re-check inputs.")
+                raise ValueError("Unrecognized project format")
+            # Rebuild UI so widgets get new defaults, then user can re-check
+            self.set_language(self.lang)
+            QMessageBox.information(self, "Open", "Project loaded. Please review the inputs and re-run analysis if needed.")
             self.status.showMessage(f"Opened {path}")
         except Exception as e:
-            QMessageBox.critical(self, "Open error", str(e))
+            QMessageBox.critical(self, "Open error", f"{type(e).__name__}: {e}")
 
     def save_project(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save project", "project.pile.json", "JSON (*.json)")
