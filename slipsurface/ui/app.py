@@ -186,27 +186,42 @@ class PileWindow(QMainWindow):
         act_open.triggered.connect(self.open_project)
         act_save = QAction(icon("save"), "Save", self)
         act_save.triggered.connect(self.save_project)
+        act_new = QAction(icon("new"), "New", self)
+        act_new.triggered.connect(self.new_project)
         act_analyse = QAction(icon("analyse"), "Analyse", self)
         act_analyse.triggered.connect(self.run_analysis)
         act_opt = QAction(icon("optimize"), "Optimize L", self)
         act_opt.triggered.connect(self.run_optimize_length)
         act_interpret = QAction(icon("interpret"), "Interpret", self)
         act_interpret.triggered.connect(self.open_interpret)
+        act_report = QAction(icon("report"), "Save Results", self)
+        act_report.triggered.connect(self.generate_report)
+        act_settings = QAction(icon("settings"), "Settings", self)
+        act_settings.triggered.connect(self.show_settings)
+        act_help = QAction(icon("help"), "Help", self)
+        act_help.triggered.connect(self.show_help)
+        tb.addAction(act_new)
         tb.addAction(act_open)
         tb.addAction(act_save)
         tb.addSeparator()
         tb.addAction(act_analyse)
         tb.addAction(act_opt)
-        tb.addSeparator()
         tb.addAction(act_interpret)
+        tb.addSeparator()
+        tb.addAction(act_report)
+        tb.addAction(act_settings)
+        tb.addAction(act_help)
 
     def _build_menu(self):
         menu = self.menuBar()
         file_menu = menu.addMenu("&File")
-        open_act = QAction("&Open Project…", self)
+        new_act = QAction(icon("new"), "&New", self)
+        new_act.triggered.connect(self.new_project)
+        open_act = QAction(icon("open"), "&Open Project…", self)
         open_act.triggered.connect(self.open_project)
-        save_act = QAction("&Save Project…", self)
+        save_act = QAction(icon("save"), "&Save Project…", self)
         save_act.triggered.connect(self.save_project)
+        file_menu.addAction(new_act)
         file_menu.addAction(open_act)
         file_menu.addAction(save_act)
         file_menu.addSeparator()
@@ -398,7 +413,30 @@ class PileWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Analysis error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
 
-    def open_interpret(self):
+    def new_project(self):
+        self.values = defaults(self.lang)
+        self.set_language(self.lang)
+        self.results.clear()
+        self.status.showMessage("New project")
+
+    def show_settings(self):
+        QMessageBox.information(
+            self, "Settings",
+            "Theme: Light (LE-style Fusion)\n"
+            "Language: use Language menu\n"
+            "Optimization parameters: set in the Optimize L dialog."
+        )
+
+    def show_help(self):
+        QMessageBox.information(
+            self, "Help",
+            f"{APP_NAME} {__version__}\n\n"
+            "1. Enter soil profile and pile data\n"
+            "2. Analyse\n"
+            "3. View results in Summary / Plots or open Interpret\n"
+            "4. Optimize L for shortest safe length\n\n"
+            "CLI: python main.py analyze|optimize-length|optimize-cost ..."
+        )
         if self.interpret is None or not self.interpret.isVisible():
             self.interpret = InterpretWindow(self)
         if hasattr(self, "last_result"):

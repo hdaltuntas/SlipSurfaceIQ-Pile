@@ -62,9 +62,50 @@ def _pixmap(name: str, size: int = 32) -> QPixmap:
         p.drawLine(QPointF(20, 32), QPointF(34, 32))
         p.setBrush(BLUE)
         p.drawEllipse(QPointF(44, 44), 6, 6)
-    else:
+    elif name == "new":
         p.setPen(_pen(INK, 4))
-        p.drawRect(QRectF(16, 16, 32, 32))
+        p.setBrush(QColor(255, 255, 255, 220))
+        p.drawRoundedRect(QRectF(16, 14, 32, 36), 3, 3)
+        p.setPen(_pen(BLUE, 3))
+        p.drawLine(QPointF(22, 24), QPointF(42, 24))
+        p.drawLine(QPointF(22, 32), QPointF(38, 32))
+        p.drawLine(QPointF(22, 40), QPointF(34, 40))
+    elif name == "report":
+        p.setPen(_pen(INK, 4))
+        p.setBrush(QColor(255, 255, 255, 200))
+        p.drawRoundedRect(QRectF(18, 10, 28, 40), 3, 3)
+        p.setPen(_pen(BLUE, 3))
+        p.drawLine(QPointF(24, 20), QPointF(40, 20))
+        p.drawLine(QPointF(24, 28), QPointF(40, 28))
+        p.drawLine(QPointF(24, 36), QPointF(36, 36))
+        p.setBrush(GREEN)
+        p.drawEllipse(QPointF(42, 42), 7, 7)
+        p.setPen(_pen(QColor("white"), 2))
+        p.drawLine(QPointF(39, 42), QPointF(42, 45))
+        p.drawLine(QPointF(42, 45), QPointF(46, 39))
+    elif name == "settings":
+        p.setPen(_pen(INK, 4))
+        p.setBrush(Qt.NoBrush)
+        p.drawEllipse(QPointF(32, 32), 10, 10)
+        for ang in range(0, 360, 45):
+            import math
+            rad = math.radians(ang)
+            x1 = 32 + 14 * math.cos(rad)
+            y1 = 32 + 14 * math.sin(rad)
+            x2 = 32 + 20 * math.cos(rad)
+            y2 = 32 + 20 * math.sin(rad)
+            p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+    elif name == "help":
+        p.setPen(_pen(BLUE, 5))
+        p.setBrush(BLUE)
+        p.drawEllipse(QPointF(32, 32), 18, 18)
+        p.setPen(_pen(QColor("white"), 4))
+        p.drawLine(QPointF(32, 22), QPointF(32, 28))
+        p.drawEllipse(QPointF(32, 40), 2.5, 2.5)
+    elif name == "quit":
+        p.setPen(_pen(QColor("#d23b2f"), 5))
+        p.drawLine(QPointF(18, 18), QPointF(46, 46))
+        p.drawLine(QPointF(46, 18), QPointF(18, 46))
 
     p.end()
     return pm
