@@ -28,6 +28,7 @@ from slipsurface.pile.optimizer import optimize_length
 from slipsurface.pile.plotting import Plotter, PLOT_KEYS
 from slipsurface.pile import APP_NAME, __version__
 from slipsurface.ui.interpret import InterpretWindow
+from slipsurface.ui.icons import icon
 
 try:
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -229,7 +230,30 @@ class PileWindow(QMainWindow):
     def _build_toolbar(self):
         tb = self.addToolBar("Main")
         tb.setMovable(False)
-        # Dark mode icon
+        tb.setIconSize(tb.iconSize())
+
+        act_new = QAction(icon("new"), "New", self)
+        act_new.triggered.connect(self.new_project)
+        act_open = QAction(icon("open"), "Open", self)
+        act_open.triggered.connect(self.open_project)
+        act_save = QAction(icon("save"), "Save", self)
+        act_save.triggered.connect(self.save_project)
+        act_analyse = QAction(icon("analyse"), "Analyse", self)
+        act_analyse.triggered.connect(self.run_analysis)
+        act_opt = QAction(icon("optimize"), "Optimize L", self)
+        act_opt.triggered.connect(self.run_optimize_length)
+        act_interpret = QAction(icon("interpret"), "Interpret", self)
+        act_interpret.triggered.connect(self.open_interpret)
+        act_refresh = QAction(icon("refresh"), "Refresh Plot", self)
+        act_refresh.triggered.connect(self._update_plot)
+        act_export = QAction(icon("export"), "Export Plot", self)
+        act_export.triggered.connect(self.export_plot)
+        act_help = QAction(icon("help"), "Help", self)
+        act_help.triggered.connect(self.show_help)
+        act_lang = QAction(icon("language"), "Language", self)
+        act_lang.triggered.connect(self.toggle_language)
+
+        # Dark mode icon (custom)
         pm = QPixmap(24, 24)
         pm.fill(Qt.transparent)
         p = QPainter(pm)
@@ -242,8 +266,22 @@ class PileWindow(QMainWindow):
         act_dark = QAction(QIcon(pm), "Dark mode", self)
         act_dark.setCheckable(True)
         act_dark.triggered.connect(self.toggle_dark)
-        tb.addAction(act_dark)
         self.act_dark = act_dark
+
+        tb.addAction(act_new)
+        tb.addAction(act_open)
+        tb.addAction(act_save)
+        tb.addSeparator()
+        tb.addAction(act_analyse)
+        tb.addAction(act_opt)
+        tb.addAction(act_interpret)
+        tb.addSeparator()
+        tb.addAction(act_refresh)
+        tb.addAction(act_export)
+        tb.addSeparator()
+        tb.addAction(act_dark)
+        tb.addAction(act_lang)
+        tb.addAction(act_help)
 
     def _build_menu(self):
         menu = self.menuBar()
@@ -495,7 +533,45 @@ class PileWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Optimization error", str(e))
 
+    def new_project(self):
+        self.values = defaults(self.lang)
+        self.set_language(self.lang)
+        self.results.clear()
+        self.status.showMessage("New project")
+
+    def toggle_language(self):
+        self.set_language("tr" if self.lang == "en" else "en")
+
+    def export_plot(self):
+        if not HAS_MPL or not hasattr(self, "fig"):
+            QMessageBox.information(self, "Export", "No plot available.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Export plot", "plot.png", "PNG (*.png);;PDF (*.pdf)")
+        if path:
+            self.fig.savefig(path, dpi=150, bbox_inches="tight")
+            self.status.showMessage(f"Plot saved to {path}")
+
+    def show_help(self):
+        QMessageBox.information(
+            self, "Help",
+            f"{APP_NAME} {__version__}\n\n"
+            "1. Enter soil profile and pile data in the sidebar\n"
+            "2. Analyse\n"
+            "3. View results and plots, or open Interpret\n"
+            "4. Optimize L for shortest safe length\n\n"
+            "CLI: python main.py analyze|optimize-length ..."
+        )
+
     def open_interpret(self):
+        if self.interpret is None or not self.interpret.isVisible():
+            self.interpret = InterpretWindow(self)
+        if hasattr(self, "last_result"):
+            self.interpret.set_analysis(self.last_result, self.lang)
+        else:
+            self.interpret.summary.setPlainText("Run an analysis first.")
+        self.interpret.show()
+        self.interpret.raise_()
+        self.interpret.activateWindow()
         if self.interpret is None or not self.interpret.isVisible():
             self.interpret = InterpretWindow(self)
         if hasattr(self, "last_result"):
