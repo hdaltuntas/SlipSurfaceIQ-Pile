@@ -41,10 +41,15 @@ def optimize_length(
     popsize: int = 15,
     maxiter: int = 40,
     seed: Optional[int] = 42,
+    atol: float = 0.05,
+    tol: float = 0.01,
+    mutation: float = 0.5,
+    recombination: float = 0.7,
+    polish: bool = True,
 ) -> Dict[str, Any]:
     """Find the shortest L that satisfies utilisation ≤ 1 (pile + group).
 
-    Returns dict with best_L, best_results, success, message.
+    Extra differential_evolution parameters are exposed for customisation.
     """
     def objective(x: np.ndarray) -> float:
         L = float(x[0])
@@ -63,9 +68,11 @@ def optimize_length(
         popsize=popsize,
         maxiter=maxiter,
         seed=seed,
-        atol=0.05,
-        tol=0.01,
-        polish=True,
+        atol=atol,
+        tol=tol,
+        mutation=mutation,
+        recombination=recombination,
+        polish=polish,
         workers=1,
     )
     best_L = float(result.x[0])
@@ -92,10 +99,16 @@ def optimize_cost(
     popsize: int = 12,
     maxiter: int = 30,
     seed: Optional[int] = 42,
+    atol: float = 0.05,
+    tol: float = 0.01,
+    mutation: float = 0.5,
+    recombination: float = 0.7,
+    polish: bool = True,
 ) -> Dict[str, Any]:
     """Minimise a simple cost subject to safety (utilisation ≤ 1).
 
     cost = cost_a * L * D**2 + cost_b * L
+    Extra differential_evolution parameters are exposed for customisation.
     """
     def objective(x: np.ndarray) -> float:
         L, D = float(x[0]), float(x[1])
@@ -114,7 +127,11 @@ def optimize_cost(
         popsize=popsize,
         maxiter=maxiter,
         seed=seed,
-        polish=True,
+        atol=atol,
+        tol=tol,
+        mutation=mutation,
+        recombination=recombination,
+        polish=polish,
         workers=1,
     )
     best_L, best_D = float(result.x[0]), float(result.x[1])

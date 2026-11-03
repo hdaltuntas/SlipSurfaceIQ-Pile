@@ -37,6 +37,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QSplitter,
     QStatusBar,
+    QDialog,
+    QDialogButtonBox,
 )
 
 from slipsurface.pile.forms import schema, defaults, to_config, from_config, project_file
@@ -103,7 +105,7 @@ class PileWindow(QMainWindow):
         btn_row = QHBoxLayout()
         self.btn_analyse = QPushButton("Analyse")
         self.btn_analyse.clicked.connect(self.run_analysis)
-        self.btn_opt = QPushButton("Optimize L")
+        self.btn_opt = QPushButton("Optimize L…")
         self.btn_opt.clicked.connect(self.run_optimize_length)
         self.btn_report = QPushButton("Save Results…")
         self.btn_report.clicked.connect(self.generate_report)
@@ -315,12 +317,37 @@ class PileWindow(QMainWindow):
             QMessageBox.critical(self, "Analysis error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
 
     def run_optimize_length(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Length optimization parameters")
+        form = QFormLayout(dlg)
+        sp_pop = QSpinBox(); sp_pop.setRange(5, 50); sp_pop.setValue(10)
+        sp_iter = QSpinBox(); sp_iter.setRange(5, 100); sp_iter.setValue(25)
+        sp_seed = QSpinBox(); sp_seed.setRange(0, 999999); sp_seed.setValue(42)
+        sp_lmin = QDoubleSpinBox(); sp_lmin.setRange(0.5, 100); sp_lmin.setValue(3.0); sp_lmin.setDecimals(1)
+        sp_lmax = QDoubleSpinBox(); sp_lmax.setRange(1.0, 200); sp_lmax.setValue(40.0); sp_lmax.setDecimals(1)
+        form.addRow("Population size", sp_pop)
+        form.addRow("Max iterations", sp_iter)
+        form.addRow("Random seed", sp_seed)
+        form.addRow("L min (m)", sp_lmin)
+        form.addRow("L max (m)", sp_lmax)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        form.addRow(buttons)
+        if dlg.exec() != QDialog.Accepted:
+            return
         try:
             vals = self._collect_values()
             cfg = to_config(vals)
             self.status.showMessage("Optimizing length (differential evolution)…")
             QApplication.processEvents()
-            res = optimize_length(cfg, L_bounds=(3.0, 40.0), popsize=10, maxiter=25)
+            res = optimize_length(
+                cfg,
+                L_bounds=(sp_lmin.value(), sp_lmax.value()),
+                popsize=sp_pop.value(),
+                maxiter=sp_iter.value(),
+                seed=sp_seed.value(),
+            )
             best_L = res["best_L"]
             success = res["success"]
             lines = [
@@ -329,6 +356,8 @@ class PileWindow(QMainWindow):
                 f"Success: {success}",
                 f"Message: {res['message']}",
                 f"Function evaluations: {res['nfev']}",
+                f"Bounds: {sp_lmin.value():.1f} – {sp_lmax.value():.1f} m",
+                f"popsize={sp_pop.value()}, maxiter={sp_iter.value()}, seed={sp_seed.value()}",
             ]
             if success and "best_results" in res:
                 br = res["best_results"]
@@ -339,7 +368,6 @@ class PileWindow(QMainWindow):
                 ]
             self.results.setPlainText("\n".join(lines))
             self.status.showMessage(f"Optimization finished — best L = {best_L:.2f} m")
-            # Optionally write the best L back into the L field if it exists
             if "L" in self.fields and isinstance(self.fields["L"], (QDoubleSpinBox, QSpinBox)):
                 self.fields["L"].setValue(best_L)
         except Exception as e:
