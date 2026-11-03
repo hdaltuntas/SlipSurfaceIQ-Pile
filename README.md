@@ -11,6 +11,7 @@ Standalone desktop program extracted from SlipSurfaceIQ-Suite, with a light PySi
 - Single-pile and group settlement
 - Rock-socketed piles (side shear correlations, base, length, elastic settlement)
 - Parametric / reliability studies
+- **Automatic optimization** (differential evolution): shortest safe length or minimum-cost design (L and D)
 - PDF / HTML / DOCX reports
 - English / Turkish interface
 - Project save/load (.pile.json)

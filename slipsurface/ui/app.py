@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 
 from slipsurface.pile.forms import schema, defaults, to_config, from_config, project_file
 from slipsurface.pile.engine import analyse
+from slipsurface.pile.optimizer import optimize_length, optimize_cost
 from slipsurface.pile import APP_NAME, __version__
 
 
@@ -102,10 +103,13 @@ class PileWindow(QMainWindow):
         btn_row = QHBoxLayout()
         self.btn_analyse = QPushButton("Analyse")
         self.btn_analyse.clicked.connect(self.run_analysis)
+        self.btn_opt = QPushButton("Optimize L")
+        self.btn_opt.clicked.connect(self.run_optimize_length)
         self.btn_report = QPushButton("Save Results…")
         self.btn_report.clicked.connect(self.generate_report)
         self.btn_report.setEnabled(False)
         btn_row.addWidget(self.btn_analyse)
+        btn_row.addWidget(self.btn_opt)
         btn_row.addWidget(self.btn_report)
         btn_row.addStretch()
         input_layout.addLayout(btn_row)
@@ -309,6 +313,37 @@ class PileWindow(QMainWindow):
             self.status.showMessage("Analysis complete")
         except Exception as e:
             QMessageBox.critical(self, "Analysis error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
+
+    def run_optimize_length(self):
+        try:
+            vals = self._collect_values()
+            cfg = to_config(vals)
+            self.status.showMessage("Optimizing length (differential evolution)…")
+            QApplication.processEvents()
+            res = optimize_length(cfg, L_bounds=(3.0, 40.0), popsize=10, maxiter=25)
+            best_L = res["best_L"]
+            success = res["success"]
+            lines = [
+                "=== Length Optimization (Differential Evolution) ===",
+                f"Best L: {best_L:.2f} m",
+                f"Success: {success}",
+                f"Message: {res['message']}",
+                f"Function evaluations: {res['nfev']}",
+            ]
+            if success and "best_results" in res:
+                br = res["best_results"]
+                lines += [
+                    f"FS: {br.get('FS', '—')}",
+                    f"Utilisation: {br.get('utilisation', '—')}",
+                    f"Group utilisation: {br.get('group', {}).get('utilisation', '—') if isinstance(br.get('group'), dict) else '—'}",
+                ]
+            self.results.setPlainText("\n".join(lines))
+            self.status.showMessage(f"Optimization finished — best L = {best_L:.2f} m")
+            # Optionally write the best L back into the L field if it exists
+            if "L" in self.fields and isinstance(self.fields["L"], (QDoubleSpinBox, QSpinBox)):
+                self.fields["L"].setValue(best_L)
+        except Exception as e:
+            QMessageBox.critical(self, "Optimization error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
 
     def generate_report(self):
         if not hasattr(self, "last_result"):
