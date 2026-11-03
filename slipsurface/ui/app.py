@@ -29,6 +29,7 @@ from slipsurface.pile.plotting import Plotter, PLOT_KEYS
 from slipsurface.pile import APP_NAME, __version__
 from slipsurface.ui.interpret import InterpretWindow
 from slipsurface.ui.icons import icon
+from slipsurface.ui.data_entry import DataEntryDialog
 
 try:
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -137,70 +138,11 @@ class PileWindow(QMainWindow):
         splitter = QSplitter(Qt.Horizontal)
         root.addWidget(splitter, 1)
 
-        # Left: sidebar + stack
-        left = QWidget()
-        left_lay = QHBoxLayout(left)
-        left_lay.setContentsMargins(0, 0, 8, 0)
-        left_lay.setSpacing(12)
-
-        self.sidebar = QListWidget()
-        self.sidebar.setFixedWidth(180)
-        self.sidebar.setStyleSheet(f"""
-            QListWidget {{
-                background: {CARD};
-                border: 1px solid {BORDER};
-                border-radius: 12px;
-                padding: 8px;
-                outline: none;
-            }}
-            QListWidget::item {{
-                padding: 10px 12px;
-                border-radius: 8px;
-                margin: 2px 0;
-            }}
-            QListWidget::item:selected {{
-                background: {ACCENT};
-                color: white;
-                font-weight: 600;
-            }}
-            QListWidget::item:hover:!selected {{
-                background: #f3f4f6;
-            }}
-        """)
-        left_lay.addWidget(self.sidebar)
-
-        self.stack = QStackedWidget()
-        left_lay.addWidget(self.stack, 1)
-        self._build_sidebar_pages()
-        self.sidebar.currentRowChanged.connect(self._animate_to_page)
-
-        btn_row = QHBoxLayout()
-        self.btn_analyse = QPushButton("Analyse")
-        self.btn_analyse.clicked.connect(self.run_analysis)
-        self.btn_opt = QPushButton("Optimize L")
-        self.btn_opt.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
-        self.btn_opt.clicked.connect(self.run_optimize_length)
-        self.btn_interpret = QPushButton("Interpret")
-        self.btn_interpret.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
-        self.btn_interpret.clicked.connect(self.open_interpret)
-        btn_row.addWidget(self.btn_analyse)
-        btn_row.addWidget(self.btn_opt)
-        btn_row.addWidget(self.btn_interpret)
-        btn_row.addStretch()
-
-        left_outer = QVBoxLayout()
-        left_outer.addLayout(left_lay)
-        left_outer.addLayout(btn_row)
-        left_container = QWidget()
-        left_container.setLayout(left_outer)
-        left_container.setMinimumWidth(500)
-        splitter.addWidget(left_container)
-
-        # Right: results + plots
+        # Main area is results only
         right = QTabWidget()
         self.results = QTextEdit()
         self.results.setReadOnly(True)
-        self.results.setPlaceholderText("Analysis results will appear here…")
+        self.results.setPlaceholderText("Analysis results will appear here…\n\nUse Data Entry to enter pile and soil data.")
         right.addTab(self.results, "Results")
 
         plot_w = QWidget()
@@ -222,7 +164,24 @@ class PileWindow(QMainWindow):
             pl.addWidget(self.canvas)
         right.addTab(plot_w, "Plots")
         splitter.addWidget(right)
-        splitter.setSizes([540, 700])
+
+        btn_row = QHBoxLayout()
+        self.btn_data = QPushButton("Data Entry…")
+        self.btn_data.clicked.connect(self.open_data_entry)
+        self.btn_analyse = QPushButton("Analyse")
+        self.btn_analyse.clicked.connect(self.run_analysis)
+        self.btn_opt = QPushButton("Optimize L")
+        self.btn_opt.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
+        self.btn_opt.clicked.connect(self.run_optimize_length)
+        self.btn_interpret = QPushButton("Interpret")
+        self.btn_interpret.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
+        self.btn_interpret.clicked.connect(self.open_interpret)
+        btn_row.addWidget(self.btn_data)
+        btn_row.addWidget(self.btn_analyse)
+        btn_row.addWidget(self.btn_opt)
+        btn_row.addWidget(self.btn_interpret)
+        btn_row.addStretch()
+        root.addLayout(btn_row)
 
         self._build_menu()
         self._build_toolbar()
@@ -238,6 +197,8 @@ class PileWindow(QMainWindow):
         act_open.triggered.connect(self.open_project)
         act_save = QAction(icon("save"), "Save", self)
         act_save.triggered.connect(self.save_project)
+        act_data = QAction(icon("new"), "Data Entry", self)
+        act_data.triggered.connect(self.open_data_entry)
         act_analyse = QAction(icon("analyse"), "Analyse", self)
         act_analyse.triggered.connect(self.run_analysis)
         act_opt = QAction(icon("optimize"), "Optimize L", self)
@@ -272,6 +233,7 @@ class PileWindow(QMainWindow):
         tb.addAction(act_open)
         tb.addAction(act_save)
         tb.addSeparator()
+        tb.addAction(act_data)
         tb.addAction(act_analyse)
         tb.addAction(act_opt)
         tb.addAction(act_interpret)
@@ -298,14 +260,44 @@ class PileWindow(QMainWindow):
 
     def set_language(self, lang: str):
         self.lang = lang
-        while self.stack.count():
-            self.stack.removeWidget(self.stack.widget(0))
-        self.sidebar.clear()
-        self.fields.clear()
-        self.tables.clear()
         self.values = defaults(lang)
-        self._build_sidebar_pages()
         self.status.showMessage(f"Language: {lang}")
+
+    def open_data_entry(self):
+        dlg = DataEntryDialog(self, self.lang, self.values)
+        if dlg.exec() == QDialog.Accepted:
+            self.values = dlg.collect()
+            self.status.showMessage("Data updated")
+
+    def run_analysis(self):
+        try:
+            vals = self.values
+            cfg = to_config(vals)
+            result = analyse(cfg)
+            self.last_result = result
+            lines = [
+                "=== Analysis Results ===",
+                f"FS: {getattr(result, 'FS', '—')}",
+                f"Q_ult: {getattr(result, 'Q', '—')} kN",
+                f"L: {getattr(result, 'L', '—')} m",
+                f"D: {getattr(result, 'D', '—')} m",
+            ]
+            if hasattr(result, "warnings") and result.warnings:
+                lines.append("\nWarnings:")
+                for w in result.warnings:
+                    lines.append(f"  - {w}")
+            try:
+                full = json.dumps(vars(result), indent=2, default=str, ensure_ascii=False)[:8000]
+                lines.append("\n--- Full data ---\n" + full)
+            except Exception:
+                pass
+            self.results.setPlainText("\n".join(lines))
+            self.status.showMessage("Analysis complete")
+            self._update_plot()
+            if self.interpret is not None:
+                self.interpret.set_analysis(self.last_result, self.lang)
+        except Exception as e:
+            QMessageBox.critical(self, "Analysis error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
 
     def _build_sidebar_pages(self):
         sch = schema(self.lang)
