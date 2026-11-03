@@ -452,6 +452,8 @@ class PileWindow(QMainWindow):
         if path:
             self.fig.savefig(path, dpi=150, bbox_inches="tight")
             self.status.showMessage(f"Plot saved to {path}")
+
+    def show_help(self):
         QMessageBox.information(
             self, "Help",
             f"{APP_NAME} {__version__}\n\n"
@@ -461,6 +463,8 @@ class PileWindow(QMainWindow):
             "4. Optimize L for shortest safe length\n\n"
             "CLI: python main.py analyze|optimize-length|optimize-cost ..."
         )
+
+    def open_interpret(self):
         if self.interpret is None or not self.interpret.isVisible():
             self.interpret = InterpretWindow(self)
         if hasattr(self, "last_result"):
