@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+pytest_full.log
+build/
+dist/
+*.egg-info/
+
+# IDE / editor settings (kept out of the repository)
+.idea/
+.vscode/
+.vs/
+.test-tmp*/
+/.ui-*.png
