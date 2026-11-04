@@ -1,8 +1,7 @@
-"""Modern desktop GUI for SlipSurfaceIQ Pile.
+"""Desktop GUI for SlipSurfaceIQ Pile.
 
-Same contemporary card-based interface as SlipSurfaceIQ Correlation:
-sidebar navigation, dark mode toolbar icon, soft accents, plots, and
-page-transition animation. Uses PySide6.
+Card-based light interface: results and plots in the main window, all inputs
+in a separate Data Entry dialog, dark mode toggle on the toolbar. Uses PySide6.
 """
 
 from __future__ import annotations
@@ -12,17 +11,16 @@ import sys
 import traceback
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette, QAction, QIcon, QPixmap, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTabWidget, QScrollArea, QFormLayout, QGroupBox, QLabel, QLineEdit,
-    QDoubleSpinBox, QSpinBox, QComboBox, QCheckBox, QPushButton, QTextEdit,
-    QTableWidget, QTableWidgetItem, QFileDialog, QMessageBox, QSplitter,
-    QStatusBar, QStackedWidget, QListWidget, QDialog, QDialogButtonBox,
+    QTabWidget, QLabel, QDoubleSpinBox, QSpinBox, QComboBox, QPushButton,
+    QTextEdit, QFileDialog, QMessageBox, QSplitter,
+    QStatusBar, QDialog, QDialogButtonBox,
 )
 
-from slipsurface.pile.forms import schema, defaults, to_config, from_config, project_file
+from slipsurface.pile.forms import defaults, to_config, from_config, project_file
 from slipsurface.pile.engine import analyse
 from slipsurface.pile.optimizer import optimize_length
 from slipsurface.pile.plotting import Plotter, PLOT_KEYS
@@ -47,6 +45,12 @@ ACCENT_HOVER = "#1d4ed8"
 TEXT = "#111827"
 MUTED = "#6b7280"
 BORDER = "#e5e7eb"
+
+DARK_BG = "#111827"
+DARK_CARD = "#1f2937"
+DARK_TEXT = "#f9fafb"
+DARK_MUTED = "#9ca3af"
+DARK_BORDER = "#374151"
 
 MODERN_STYLE = f"""
 QMainWindow, QWidget {{ background: {BG}; color: {TEXT}; font-family: 'Segoe UI', system-ui, sans-serif; }}
@@ -88,6 +92,13 @@ QTextEdit {{ border: 1px solid {BORDER}; border-radius: 12px; background: {CARD}
 QStatusBar {{ background: {CARD}; border-top: 1px solid {BORDER}; }}
 """
 
+DARK_STYLE = (MODERN_STYLE
+              .replace(TEXT, DARK_TEXT)
+              .replace(MUTED, DARK_MUTED)
+              .replace(BORDER, DARK_BORDER)
+              .replace(CARD, DARK_CARD)
+              .replace(BG, DARK_BG))
+
 
 def modern_palette() -> QPalette:
     pal = QPalette()
@@ -109,8 +120,7 @@ class PileWindow(QMainWindow):
         self.resize(1280, 840)
         self.lang = "en"
         self.values = defaults(self.lang)
-        self.fields: dict = {}
-        self.tables: dict = {}
+        self.last_result = None
         self.interpret = None
         self.setStyleSheet(MODERN_STYLE)
         self._build_ui()
@@ -197,7 +207,7 @@ class PileWindow(QMainWindow):
         act_open.triggered.connect(self.open_project)
         act_save = QAction(icon("save"), "Save", self)
         act_save.triggered.connect(self.save_project)
-        act_data = QAction(icon("new"), "Data Entry", self)
+        act_data = QAction(icon("settings"), "Data Entry", self)
         act_data.triggered.connect(self.open_data_entry)
         act_analyse = QAction(icon("analyse"), "Analyse", self)
         act_analyse.triggered.connect(self.run_analysis)
@@ -259,8 +269,9 @@ class PileWindow(QMainWindow):
         view_m.addAction("Interpret Window", self.open_interpret)
 
     def set_language(self, lang: str):
+        if lang == self.lang:
+            return
         self.lang = lang
-        self.values = defaults(lang)
         self.status.showMessage(f"Language: {lang}")
 
     def open_data_entry(self):
@@ -271,186 +282,17 @@ class PileWindow(QMainWindow):
 
     def run_analysis(self):
         try:
-            vals = self.values
-            cfg = to_config(vals)
+            cfg = to_config(self.values)
             result = analyse(cfg)
             self.last_result = result
+            res = result.results if hasattr(result, "results") else {}
             lines = [
                 "=== Analysis Results ===",
-                f"FS: {getattr(result, 'FS', '—')}",
-                f"Q_ult: {getattr(result, 'Q', '—')} kN",
-                f"L: {getattr(result, 'L', '—')} m",
-                f"D: {getattr(result, 'D', '—')} m",
-            ]
-            if hasattr(result, "warnings") and result.warnings:
-                lines.append("\nWarnings:")
-                for w in result.warnings:
-                    lines.append(f"  - {w}")
-            try:
-                full = json.dumps(vars(result), indent=2, default=str, ensure_ascii=False)[:8000]
-                lines.append("\n--- Full data ---\n" + full)
-            except Exception:
-                pass
-            self.results.setPlainText("\n".join(lines))
-            self.status.showMessage("Analysis complete")
-            self._update_plot()
-            if self.interpret is not None:
-                self.interpret.set_analysis(self.last_result, self.lang)
-        except Exception as e:
-            QMessageBox.critical(self, "Analysis error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
-
-    def _build_sidebar_pages(self):
-        sch = schema(self.lang)
-        pages = []
-        # Soil table
-        if "soil" in sch and "columns" in sch["soil"]:
-            pages.append(("Soil Profile", self._make_table_page("soil", sch["soil"])))
-        # Groups
-        for part in ("project", "pile", "options", "socket", "study"):
-            if part in sch and "groups" in sch[part]:
-                pages.append((part.capitalize(), self._make_groups_page(part, sch[part])))
-        for title, widget in pages:
-            self.sidebar.addItem(title)
-            self.stack.addWidget(widget)
-        if self.sidebar.count():
-            self.sidebar.setCurrentRow(0)
-
-    def _animate_to_page(self, index: int):
-        if index < 0 or index >= self.stack.count():
-            return
-        anim = QPropertyAnimation(self.stack, b"windowOpacity")
-        anim.setDuration(180)
-        anim.setStartValue(0.65)
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.OutCubic)
-        self.stack.setCurrentIndex(index)
-        anim.start()
-        self._page_anim = anim
-
-    def _make_table_page(self, name: str, spec: dict) -> QWidget:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        if spec.get("note"):
-            note = QLabel(spec["note"])
-            note.setWordWrap(True)
-            note.setStyleSheet(f"color: {MUTED};")
-            lay.addWidget(note)
-        table = QTableWidget()
-        cols = spec.get("columns", [])
-        table.setColumnCount(len(cols))
-        table.setHorizontalHeaderLabels([c.get("label", c["key"]) for c in cols])
-        rows = spec.get("rows", [])
-        table.setRowCount(max(len(rows), 3))
-        for r, row in enumerate(rows):
-            for c, col in enumerate(cols):
-                table.setItem(r, c, QTableWidgetItem(str(row.get(col["key"], ""))))
-        lay.addWidget(table)
-        add = QPushButton("+ Add row")
-        add.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
-        add.clicked.connect(lambda: table.insertRow(table.rowCount()))
-        lay.addWidget(add)
-        scroll.setWidget(w)
-        self.tables[name] = table
-        return scroll
-
-    def _make_groups_page(self, name: str, part: dict) -> QWidget:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        for group in part.get("groups", []):
-            gb = QGroupBox(group.get("title", name))
-            form = QFormLayout(gb)
-            for field in group.get("fields", []):
-                widget = self._make_field(field)
-                form.addRow(field.get("label", field["key"]), widget)
-                self.fields[field["key"]] = widget
-            lay.addWidget(gb)
-        lay.addStretch()
-        scroll.setWidget(w)
-        return scroll
-
-    def _make_field(self, field: dict):
-        kind = field.get("kind", "number")
-        default = field.get("default")
-        if kind == "select":
-            cb = QComboBox()
-            for opt in field.get("options", []):
-                cb.addItem(str(opt.get("label", opt.get("value", ""))), opt.get("value"))
-            idx = cb.findData(default)
-            if idx >= 0:
-                cb.setCurrentIndex(idx)
-            return cb
-        if kind == "check":
-            chk = QCheckBox()
-            chk.setChecked(bool(default))
-            return chk
-        if kind in ("number", "float"):
-            sp = QDoubleSpinBox()
-            sp.setDecimals(field.get("dec", 2))
-            sp.setRange(field.get("lo", -1e9), field.get("hi", 1e9))
-            sp.setValue(float(default or 0))
-            return sp
-        return QLineEdit(str(default or ""))
-
-    def _collect_values(self) -> dict:
-        vals = dict(self.values)
-        dead = []
-        for key, widget in list(self.fields.items()):
-            try:
-                if isinstance(widget, QComboBox):
-                    vals[key] = widget.currentData()
-                elif isinstance(widget, QCheckBox):
-                    vals[key] = widget.isChecked()
-                elif isinstance(widget, (QDoubleSpinBox, QSpinBox)):
-                    vals[key] = widget.value()
-                elif isinstance(widget, QLineEdit):
-                    vals[key] = widget.text()
-            except RuntimeError:
-                dead.append(key)
-        for k in dead:
-            self.fields.pop(k, None)
-        for name, table in list(self.tables.items()):
-            try:
-                sch = schema(self.lang).get(name, {})
-                cols = sch.get("columns", [])
-                rows = []
-                for r in range(table.rowCount()):
-                    row = {}
-                    has = False
-                    for c, col in enumerate(cols):
-                        item = table.item(r, c)
-                        text = (item.text() if item else "").strip()
-                        key = col["key"]
-                        kind = col.get("kind", "text")
-                        if kind == "number":
-                            try:
-                                row[key] = float(text) if text else 0.0
-                            except ValueError:
-                                row[key] = 0.0
-                        else:
-                            row[key] = text
-                        if text:
-                            has = True
-                    if has:
-                        rows.append(row)
-                vals[name] = rows
-            except RuntimeError:
-                self.tables.pop(name, None)
-        return vals
-
-    def run_analysis(self):
-        try:
-            vals = self._collect_values()
-            cfg = to_config(vals)
-            result = analyse(cfg)
-            self.last_result = result
-            lines = [
-                "=== Analysis Results ===",
-                f"FS: {getattr(result, 'FS', '—')}",
-                f"Q_ult: {getattr(result, 'Q', '—')} kN",
+                f"FS: {res.get('FS', '—')}",
+                f"Q_ult: {res.get('Q_ult', '—')} kN",
+                f"Q_all: {res.get('Q_all', '—')} kN",
+                f"Utilisation: {res.get('utilisation', '—')}",
+                f"Required length: {res.get('required_length', '—')} m",
                 f"L: {getattr(result, 'L', '—')} m",
                 f"D: {getattr(result, 'D', '—')} m",
             ]
@@ -504,8 +346,7 @@ class PileWindow(QMainWindow):
         if dlg.exec() != QDialog.Accepted:
             return
         try:
-            vals = self._collect_values()
-            cfg = to_config(vals)
+            cfg = to_config(self.values)
             self.status.showMessage("Optimizing length…")
             QApplication.processEvents()
             res = optimize_length(cfg, L_bounds=(sp_lmin.value(), sp_lmax.value()),
@@ -520,14 +361,13 @@ class PileWindow(QMainWindow):
             ]
             self.results.setPlainText("\n".join(lines))
             self.status.showMessage(f"Best L = {best_L:.2f} m")
-            if "L" in self.fields and isinstance(self.fields["L"], (QDoubleSpinBox, QSpinBox)):
-                self.fields["L"].setValue(best_L)
+            self.values["L"] = best_L
         except Exception as e:
             QMessageBox.critical(self, "Optimization error", str(e))
 
     def new_project(self):
         self.values = defaults(self.lang)
-        self.set_language(self.lang)
+        self.last_result = None
         self.results.clear()
         self.status.showMessage("New project")
 
@@ -547,7 +387,7 @@ class PileWindow(QMainWindow):
         QMessageBox.information(
             self, "Help",
             f"{APP_NAME} {__version__}\n\n"
-            "1. Enter soil profile and pile data in the sidebar\n"
+            "1. Enter soil profile and pile data via Data Entry\n"
             "2. Analyse\n"
             "3. View results and plots, or open Interpret\n"
             "4. Optimize L for shortest safe length\n\n"
@@ -564,23 +404,13 @@ class PileWindow(QMainWindow):
         self.interpret.show()
         self.interpret.raise_()
         self.interpret.activateWindow()
-        if self.interpret is None or not self.interpret.isVisible():
-            self.interpret = InterpretWindow(self)
-        if hasattr(self, "last_result"):
-            self.interpret.set_analysis(self.last_result, self.lang)
-        else:
-            self.interpret.summary.setPlainText("Run an analysis first.")
-        self.interpret.show()
-        self.interpret.raise_()
-        self.interpret.activateWindow()
 
     def toggle_dark(self):
         if not hasattr(self, "_dark"):
             self._dark = False
         self._dark = not self._dark
         if self._dark:
-            self.setStyleSheet(MODERN_STYLE.replace(BG, "#111827").replace(CARD, "#1f2937")
-                               .replace(TEXT, "#f9fafb").replace(MUTED, "#9ca3af").replace(BORDER, "#374151"))
+            self.setStyleSheet(DARK_STYLE)
             self.act_dark.setText("Light")
         else:
             self.setStyleSheet(MODERN_STYLE)
@@ -593,8 +423,13 @@ class PileWindow(QMainWindow):
             return
         try:
             data = json.loads(Path(path).read_text(encoding="utf-8"))
-            self.values = from_config(data["config"]) if isinstance(data, dict) and "config" in data else data
-            self.set_language(self.lang)
+            if isinstance(data, dict) and "config" in data:
+                self.values = from_config(data["config"])
+            elif isinstance(data, dict) and ("format" in data or "pile" in data or "soil_profile" in data):
+                self.values = from_config(data)
+            else:
+                self.values = data
+            self.last_result = None
             self.status.showMessage(f"Opened {path}")
         except Exception as e:
             QMessageBox.critical(self, "Open error", str(e))
@@ -604,7 +439,7 @@ class PileWindow(QMainWindow):
         if not path:
             return
         try:
-            Path(path).write_text(json.dumps(project_file(self._collect_values()), indent=2, ensure_ascii=False), encoding="utf-8")
+            Path(path).write_text(json.dumps(project_file(self.values), indent=2, ensure_ascii=False), encoding="utf-8")
             self.status.showMessage(f"Saved {path}")
         except Exception as e:
             QMessageBox.critical(self, "Save error", str(e))
