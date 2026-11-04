@@ -16,7 +16,7 @@ from PySide6.QtGui import QColor, QPalette, QAction, QIcon, QPixmap, QPainter, Q
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QDoubleSpinBox, QSpinBox, QComboBox, QPushButton,
-    QTextEdit, QFileDialog, QMessageBox, QSplitter,
+    QTextEdit, QFileDialog, QMessageBox, QSplitter, QFormLayout,
     QStatusBar, QDialog, QDialogButtonBox,
 )
 
@@ -338,7 +338,7 @@ class PileWindow(QMainWindow):
             return
         self.lang = lang
         self.retranslate_ui()
-        self.status.showMessage(t(lang, "ui_language", lang=lang))
+        self.status.showMessage(t(lang, "ui_language", code=lang))
 
     def open_data_entry(self):
         dlg = DataEntryDialog(self, self.lang, self.values)
@@ -410,7 +410,6 @@ class PileWindow(QMainWindow):
         try:
             socket = analyse_socket(to_config(self.values))
             self.last_socket = socket
-            res = socket.results
             lines = [
                 t(L, "ui_socket_header"),
                 summary_mod.socket_headline(socket, L),
