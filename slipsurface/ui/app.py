@@ -29,6 +29,7 @@ from slipsurface.pile.plotting import Plotter, SocketPlotter, PLOT_KEYS, SOCKET_
 from slipsurface.pile.socket import analyse_socket
 from slipsurface.pile import summary as summary_mod
 from slipsurface.pile.study import Study
+from slipsurface.pile import study as study_mod
 from slipsurface.pile.i18n import t, warning_text, TRANSLATIONS
 from slipsurface.pile import report as report_mod
 from slipsurface.pile import APP_NAME, __version__
@@ -239,6 +240,7 @@ class PileWindow(QMainWindow):
         act_analyse = act("analyse", "run_analysis_button", self.run_analysis)
         act_socket = act("analyse", "run_socket_button", self.run_socket)
         act_study = act("analyse", "study_run", self.run_study)
+        act_export_study = act("export", "ui_export_study", self.export_study)
         act_opt = act("optimize", "ui_optimize_length", self.run_optimize_length)
         act_interpret = act("interpret", "ui_interpret", self.open_interpret)
         act_refresh = act("refresh", "ui_refresh", self._update_plot)
@@ -271,6 +273,7 @@ class PileWindow(QMainWindow):
         tb.addAction(act_analyse)
         tb.addAction(act_socket)
         tb.addAction(act_study)
+        tb.addAction(act_export_study)
         tb.addAction(act_opt)
         tb.addAction(act_interpret)
         tb.addSeparator()
@@ -468,6 +471,27 @@ class PileWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, t(L, "study_run"),
                                  t(L, "study_failed", e=f"{type(e).__name__}: {e}"))
+
+    def export_study(self):
+        L = self.lang
+        if self.last_study is None or not self.last_study.rows:
+            QMessageBox.information(self, t(L, "ui_export_study"), t(L, "study_no_data"))
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, t(L, "ui_export_study"), "study.csv",
+            f"{t(L, 'study_export_csv')} (*.csv);;{t(L, 'study_export_xlsx')} (*.xlsx)")
+        if not path:
+            return
+        try:
+            if path.lower().endswith(".xlsx"):
+                study_mod.to_xlsx(self.last_study, path)
+            else:
+                study_mod.to_csv(self.last_study, path if path.lower().endswith(".csv")
+                                 else path + ".csv")
+                path = path if path.lower().endswith(".csv") else path + ".csv"
+            self.status.showMessage(t(L, "ui_saved", path=path))
+        except Exception as e:
+            QMessageBox.critical(self, t(L, "ui_export_study"), str(e))
 
     def export_report(self):
         L = self.lang
