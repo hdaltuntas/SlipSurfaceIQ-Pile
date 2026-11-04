@@ -316,7 +316,7 @@ class PileWindow(QMainWindow):
 
     def _sync_pile_type(self):
         """Inputs, commands and figures follow the pile type."""
-        is_bored = self.pile_type == "bored"
+        is_bored = self.pile_type != "socket"
         for value, button in self.type_buttons.items():
             button.blockSignals(True)
             button.setChecked(value == self.pile_type)
@@ -603,7 +603,7 @@ class PileWindow(QMainWindow):
             self.headline.setText(summary_mod.socket_headline(socket, L))
             self.cards.set_cards(summary_mod.socket_cards(socket, L))
             self.results.setPlainText(summary_mod.socket_text(socket, L))
-        elif self.pile_type == "bored" and self.last_result is not None:
+        elif self.pile_type != "socket" and self.last_result is not None:
             self.headline.setText(summary_mod.headline(self.last_result, L))
             self.cards.set_cards(summary_mod.cards(self.last_result, L))
             self.results.setPlainText(summary_mod.results_text(self.last_result, L))
@@ -618,7 +618,7 @@ class PileWindow(QMainWindow):
 
     def _fill_plot_combo(self, select: str | None = None):
         current = select or self.plot_combo.currentData()
-        bored = self.pile_type == "bored"
+        bored = self.pile_type != "socket"
         keys = figure_keys(self.pile_type, self.last_result if bored else None,
                            self.last_study if bored else None)
         self.plot_combo.blockSignals(True)
@@ -632,7 +632,7 @@ class PileWindow(QMainWindow):
 
     def _fill_output_combo(self):
         """The outputs a study figure can show; hidden for the other figures."""
-        study = self.last_study if self.pile_type == "bored" else None
+        study = self.last_study if self.pile_type != "socket" else None
         outputs = study_plots.default_outputs(study) if study is not None else []
         current = self.output_combo.currentData()
         names = TRANSLATIONS.get(self.lang, TRANSLATIONS["en"])
@@ -716,7 +716,7 @@ class PileWindow(QMainWindow):
     # ------------------------------------------------------------------ study
     def run_study(self):
         L = self.lang
-        if self.pile_type != "bored":
+        if self.pile_type == "socket":
             return
         spec = study_spec(self.values)
         variables = study_variables(self.values)
@@ -794,7 +794,7 @@ class PileWindow(QMainWindow):
     # ------------------------------------------------------------------ optimize
     def run_optimize_length(self):
         L = self.lang
-        if self.pile_type != "bored":
+        if self.pile_type == "socket":
             return
         dlg = QDialog(self)
         dlg.setWindowTitle(t(L, "ui_opt_title"))

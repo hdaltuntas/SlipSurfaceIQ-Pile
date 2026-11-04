@@ -53,21 +53,31 @@ FILE_VERSION = "0.1"
 #: results and figures come back.
 #:   bored   — a bored (cast-in-place) pile, or a group of them, in a layered
 #:             soil profile: axial capacity, group action, settlement, seismic
+#:   driven  — the same analysis for a driven pile; its installation (small or
+#:             large displacement) sets the earth pressure along the shaft
 #:   socket  — a pile socketed into rock: side shear, base, socket length and
 #:             settlement of the socket
-PILE_TYPES = ["bored", "socket"]
+PILE_TYPES = ["bored", "driven", "socket"]
+
+#: The pile types analysed in the soil profile (capacity, group, settlement)
+SOIL_PILES = ["bored", "driven"]
+
+#: How a driven pile can be installed; the first is the default
+DRIVEN_INSTALLATIONS = ["driven_high", "driven_low"]
 
 #: Older project files called the bored pile a "pile in soil"
 _LEGACY_PILE_TYPES = {"soil": "bored"}
 
 #: Condition shorthands for the schema
-BORED = [("pile_type", ["bored"])]
+IN_SOIL = [("pile_type", SOIL_PILES)]
+DRIVEN = [("pile_type", ["driven"])]
 SOCKET = [("pile_type", ["socket"])]
 
 
 #: The project title a new project of each type starts with
 DEFAULT_TITLES = {
     "bored": DEFAULT_CONFIG["project_info"]["title"],
+    "driven": "Project: Driven pile group in layered ground",
     "socket": "Project: Rock-socketed pile",
 }
 
@@ -218,12 +228,14 @@ def pile_groups(lang: str = "en") -> List[Group]:
             _num("D", _t(lang, "D_label"), p["D"], 0.1, 5, "m", 2, 0.05),
             _num("L", _t(lang, "L_label"), p["L"], 0.5, 200, "m", 2, 0.5),
             _num("top", _t(lang, "top_label"), p["top"], 0, 50, "m", 2, 0.1),
+            _select("installation", _t(lang, "installation_label"), DRIVEN_INSTALLATIONS[0],
+                    _choices(lang, "installation", DRIVEN_INSTALLATIONS), when=DRIVEN),
             _num("gamma_p", _t(lang, "gamma_p_label"), p["gamma_p"], 1, 100, "kN/m³", 1, 0.5),
             _num("Ep", _t(lang, "Ep_label"), p["Ep"], 100, 300000, "MPa", 0, 1000),
-        ], note=_t(lang, "pile_note"), when=BORED),
+        ], note=_t(lang, "pile_note"), when=IN_SOIL),
         Group(_t(lang, "group_loading"), [
             _num("Q", _t(lang, "Q_label"), DEFAULT_CONFIG["loading"]["Q"], 1, 1e7, "kN", 1, 100),
-        ], note=_t(lang, "loading_note"), when=BORED),
+        ], note=_t(lang, "loading_note"), when=IN_SOIL),
         Group(_t(lang, "group_group"), [
             _num("nx", _t(lang, "nx_label"), g["nx"], 1, 50, "", 0, 1),
             _num("ny", _t(lang, "ny_label"), g["ny"], 1, 50, "", 0, 1),
@@ -232,7 +244,7 @@ def pile_groups(lang: str = "en") -> List[Group]:
             _select("efficiency", _t(lang, "efficiency_label"), g["efficiency"],
                     _choices(lang, "eff", EFFICIENCY_METHODS)),
             _check("block", _t(lang, "block_label"), g["block"]),
-        ], note=_t(lang, "group_note"), when=BORED),
+        ], note=_t(lang, "group_note"), when=IN_SOIL),
     ]
 
 
@@ -257,11 +269,11 @@ def option_groups(lang: str = "en") -> List[Group]:
             _num("zc_ratio", _t(lang, "zc_ratio_label"), o["zc_ratio"], 1, 50, "", 1, 1,
                  when=[("critical_depth", [True])]),
             _check("spt_method", _t(lang, "spt_method_label"), o["spt_method"]),
-        ], note=_t(lang, "methods_note"), when=BORED),
+        ], note=_t(lang, "methods_note"), when=IN_SOIL),
         Group(_t(lang, "group_weight"), [
             _check("subtract_weight", _t(lang, "subtract_weight_label"), o["subtract_weight"]),
             _check("buoyant_weight", _t(lang, "buoyant_weight_label"), o["buoyant_weight"]),
-        ], note=_t(lang, "weight_note"), when=BORED),
+        ], note=_t(lang, "weight_note"), when=IN_SOIL),
         Group(_t(lang, "group_settlement"), [
             _select("group_method", _t(lang, "group_method_label"), s["group_method"],
                     _choices(lang, "gs", GROUP_SETTLEMENT)),
@@ -270,14 +282,14 @@ def option_groups(lang: str = "en") -> List[Group]:
             _num("spread", _t(lang, "spread_label"), s["spread"], 0.5, 10, "", 1, 0.5),
             _select("distribution", _t(lang, "distribution_label"), s["distribution"],
                     _choices(lang, "distribution", SKIN_DISTRIBUTIONS)),
-        ], note=_t(lang, "settlement_note"), when=BORED),
+        ], note=_t(lang, "settlement_note"), when=IN_SOIL),
         seismic_group(lang),
         Group(_t(lang, "group_criteria"), [
             _num("FS", _t(lang, "FS_label"), c["FS"], 1, 10, "", 2, 0.1),
             _num("s_allow", _t(lang, "s_allow_label"), c["s_allow"], 1, 500, "mm", 1, 5),
             _num("L_min", _t(lang, "L_min_label"), c["L_min"], 0.5, 100, "m", 2, 0.5),
             _num("L_step", _t(lang, "L_step_label"), c["L_step"], 0.05, 5, "m", 2, 0.05),
-        ], note=_t(lang, "criteria_note"), when=BORED),
+        ], note=_t(lang, "criteria_note"), when=IN_SOIL),
     ]
 
 
@@ -298,7 +310,7 @@ def seismic_group(lang: str = "en") -> Group:
              when=on),
         _num("FS_E_t", _t(lang, "FS_E_t_label"), e["FS_tension"], 1, 10, "", 2, 0.1,
              when=on),
-    ], note=_t(lang, "seismic_note"), when=BORED)
+    ], note=_t(lang, "seismic_note"), when=IN_SOIL)
 
 
 def socket_groups(lang: str = "en") -> List[Group]:
@@ -355,7 +367,7 @@ def study_groups(lang: str = "en") -> List[Group]:
                 [(m, _t(lang, f"sampling_{m}")) for m in SAMPLING]),
         _num("study_n", _t(lang, "study_n"), 200, 3, 100000, "", 0, 50),
         _num("study_seed", _t(lang, "study_seed"), 0, 0, 10 ** 6, "", 0, 1),
-    ], note=_t(lang, "study_note"), when=BORED)]
+    ], note=_t(lang, "study_note"), when=IN_SOIL)]
 
 
 # --------------------------------------------------------------------------- #
@@ -416,8 +428,8 @@ PARTS = ("project", "pile", "options", "socket", "study")
 
 #: The pile types each part and table of the schema belongs to; a part that is
 #: not listed applies to every type.
-PART_TYPES = {"options": ["bored"], "socket": ["socket"], "study": ["bored"],
-              "soil": ["bored"], "study_vars": ["bored"]}
+PART_TYPES = {"options": SOIL_PILES, "socket": ["socket"], "study": SOIL_PILES,
+              "soil": SOIL_PILES, "study_vars": SOIL_PILES}
 
 
 def schema(lang: str = "en") -> dict:
@@ -544,8 +556,11 @@ def to_config(values: dict) -> Dict[str, Any]:
     cfg["soil_profile"] = read_soil_profile(values)
     cfg["pile_type"] = pile_type_of(values.get("pile_type"))
     if cfg["pile_type"] == "bored":
-        # The program analyses bored piles: the installation follows the type.
+        # the installation follows the type: a bored pile is bored
         cfg["pile"]["installation"] = "bored"
+    elif cfg["pile_type"] == "driven":
+        if cfg["pile"]["installation"] not in DRIVEN_INSTALLATIONS:
+            cfg["pile"]["installation"] = DRIVEN_INSTALLATIONS[0]
     return cfg
 
 
@@ -555,11 +570,21 @@ def from_config(cfg: dict, base: Optional[dict] = None) -> Dict[str, Any]:
     Whatever the file does not carry keeps its default.
     """
     values = dict(base) if base is not None else defaults()
-    if "pile_type" in cfg:
+    installation = (cfg.get("pile") or {}).get("installation")
+    if "pile_type" in cfg or installation in DRIVEN_INSTALLATIONS:
         values["pile_type"] = pile_type_of(cfg.get("pile_type"))
+        # Files from before the driven type: a "pile in soil" (or no type at
+        # all) installed by driving is a driven pile.
+        if values["pile_type"] == "bored" and installation in DRIVEN_INSTALLATIONS \
+                and cfg.get("pile_type") in (None, "soil"):
+            values["pile_type"] = "driven"
     for flat, section, key in _MAP:
         if key in (cfg.get(section) or {}):
             values[flat] = cfg[section][key]
+    if values.get("installation") not in DRIVEN_INSTALLATIONS:
+        # the field only offers the driven ways; a bored pile's "bored" is
+        # set by its type, not by the field
+        values["installation"] = DRIVEN_INSTALLATIONS[0]
     if cfg.get("soil_profile"):
         layer_defaults = DEFAULT_CONFIG["soil_profile"][0]
         values["soil_profile"] = [{**layer_defaults, **layer} for layer in cfg["soil_profile"]

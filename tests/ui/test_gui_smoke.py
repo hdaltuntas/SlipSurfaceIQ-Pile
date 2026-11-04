@@ -45,8 +45,8 @@ def test_a_finished_task_is_not_reported_as_cancelled(app):
     assert ok and result == 42
 
 
-def test_both_pile_types_analyse_and_draw_every_figure(window, app):
-    for pile_type in ("bored", "socket"):
+def test_every_pile_type_analyses_and_draws_every_figure(window, app):
+    for pile_type in ("bored", "driven", "socket"):
         window.set_pile_type(pile_type)
         assert window.run_analysis() is not False
         assert window._current_analysis() is not None, pile_type
@@ -114,3 +114,15 @@ def test_a_saved_project_reopens_with_its_pile_type(window, tmp_path):
     window._dirty = False
     window.open_project(path)
     assert window.pile_type == "socket" and window._path == path
+
+
+def test_a_driven_pile_asks_how_it_is_installed(window, app):
+    from slipsurface.ui.data_entry import DataEntryDialog
+    d = DataEntryDialog(window, "en", window.values)
+    row_visible = {w: form.isRowVisible(w) for w, form, _ in d._conditional_fields}
+    assert not row_visible[d.fields["installation"]]          # bored by default
+    d.type_buttons["driven"].setChecked(True)
+    app.processEvents()
+    form = next(f for w, f, _ in d._conditional_fields if w is d.fields["installation"])
+    assert form.isRowVisible(d.fields["installation"])
+    assert d.collect()["pile_type"] == "driven"

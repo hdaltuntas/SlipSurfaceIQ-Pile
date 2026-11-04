@@ -54,11 +54,13 @@ ENTRIES = {
     'shape_label': 'Cross-section',
     'pile_type_label': 'Pile type',
     'pile_type_bored': 'Bored pile',
+    'pile_type_driven': 'Driven pile',
     'group_pile_type': 'Pile type',
     'pile_type_note': ('Choose the pile type first: it sets which inputs are asked for, '
                        'which analysis runs and which results and figures are shown. '
-                       'Bored pile: capacity, group, settlement and seismic checks in the '
-                       'soil profile. Rock-socketed pile: side shear, base resistance, '
+                       'Bored and driven piles: capacity, group, settlement and seismic '
+                       'checks in the soil profile (a driven pile also asks how it is '
+                       'installed). Rock-socketed pile: side shear, base resistance, '
                        'socket length and settlement in rock.'),
     'ui_pile_type': 'Pile type:',
     'ui_untitled': 'Untitled',
@@ -72,7 +74,7 @@ ENTRIES = {
     'ui_preview': 'Preview',
     'ui_invalid_cells': 'Some table cells are not valid (marked red):\n\n{cells}\n\nKeep the data anyway?',
     'ui_pile_type_changed': 'Pile type: {name} — inputs and outputs updated',
-    'ui_bored_only': 'Available for bored piles only',
+    'ui_bored_only': 'Available for piles in soil (bored or driven) only',
     'ui_tab_project': 'Project',
     'ui_tab_pile': 'Pile && Loads',
     'ui_tab_socket_pile': 'Socket && Rock',
@@ -437,7 +439,7 @@ ENTRIES = {
     'ui_soil_tab': 'Soil Profile',
     'ui_study_vars_tab': 'Study Variables',
     'ui_add_row': '+ Add row',
-    'ui_help_text': '{app} {version}\n\n1. Choose the pile type in the header: Bored pile or Rock-socketed pile\n2. Enter the data for that type via Data Entry (only its inputs are shown)\n3. Analyse (F5) — runs the analysis of the chosen type\n4. View results and plots, or open Interpret\n5. Bored pile: optimize L, run a study\n6. Export a PDF report\n\nCLI: python main.py analyze|optimize-length ...',
+    'ui_help_text': '{app} {version}\n\n1. Choose the pile type in the header: Bored, Driven or Rock-socketed pile\n2. Enter the data for that type via Data Entry (only its inputs are shown)\n3. Analyse (F5) — runs the analysis of the chosen type\n4. View results and plots, or open Interpret\n5. Bored or driven pile: optimize L, run a study\n6. Export a PDF report\n\nCLI: python main.py analyze|optimize-length ...',
     'group_study': 'Study options',
     'study_method': 'Sampling',
     'study_n': 'Samples',

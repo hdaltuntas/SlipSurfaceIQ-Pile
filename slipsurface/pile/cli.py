@@ -7,8 +7,8 @@
                              analysis — print the results, optionally a PDF
     socket                   analyse a project as a rock-socketed pile
     study                    run the study defined in a project
-    optimize-length          shortest safe length (bored pile)
-    optimize-cost            cheapest safe length and diameter (bored pile)
+    optimize-length          shortest safe length (bored or driven pile)
+    optimize-cost            cheapest safe length and diameter (bored or driven pile)
     example                  write a starter project file
     --check                  check the Python version and the dependencies
 """
@@ -92,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     study.add_argument("project", help="path to a .pile.json project file")
     study.add_argument("-o", "--out", default=None, help="write the samples here (.csv / .xlsx)")
 
-    ol = sub.add_parser("optimize-length", help="find the shortest safe length (bored pile)")
+    ol = sub.add_parser("optimize-length", help="find the shortest safe length (bored or driven pile)")
     ol.add_argument("project", help="path to a .pile.json project file")
     ol.add_argument("--lmin", type=float, default=3.0)
     ol.add_argument("--lmax", type=float, default=40.0)
@@ -101,7 +101,7 @@ def build_parser() -> argparse.ArgumentParser:
     ol.add_argument("--seed", type=int, default=42)
 
     oc = sub.add_parser("optimize-cost",
-                        help="cheapest safe length and diameter (bored pile)")
+                        help="cheapest safe length and diameter (bored or driven pile)")
     oc.add_argument("project", help="path to a .pile.json project file")
     oc.add_argument("--lmin", type=float, default=3.0)
     oc.add_argument("--lmax", type=float, default=40.0)
@@ -117,7 +117,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     example = sub.add_parser("example", help="write a starter project file")
     example.add_argument("-o", "--out", default="project.pile.json")
-    example.add_argument("--type", choices=["bored", "socket"], default="bored",
+    example.add_argument("--type", choices=["bored", "driven", "socket"], default="bored",
                          help="the pile type of the starter project")
     return parser
 
@@ -198,7 +198,7 @@ def cmd_analyze(args, force_socket: bool = False) -> int:
     res = result.results
     if args.json:
         print(json.dumps({
-            "pile_type": "bored",
+            "pile_type": cfg["pile_type"],
             "FS": _finite(res.get("FS")),
             "Q_ult": _finite(res.get("Q_ult")),
             "Q_all": _finite(res.get("Q_all")),
@@ -218,8 +218,8 @@ def cmd_analyze(args, force_socket: bool = False) -> int:
 
 def _require_bored(cfg: dict, command: str) -> None:
     if cfg.get("pile_type") == "socket":
-        raise ValueError(f"'{command}' works on bored piles; this project is a "
-                         "rock-socketed pile.")
+        raise ValueError(f"'{command}' works on piles in soil (bored or driven); this "
+                         "project is a rock-socketed pile.")
 
 
 def cmd_study(args) -> int:
@@ -273,7 +273,7 @@ def cmd_example(args) -> int:
     values = forms.defaults()
     values["pile_type"] = args.type
     values["title"] = forms.default_title(args.type)
-    if args.type == "bored":
+    if args.type != "socket":
         values["study_variables"] = _example_study(values)
     Path(args.out).write_text(json.dumps(forms.project_file(values), indent=2,
                                          ensure_ascii=False), encoding="utf-8")

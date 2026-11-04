@@ -36,7 +36,7 @@ def test_analyze_writes_a_pdf_report(project, tmp_path):
 
 def test_bored_only_commands_refuse_a_socket(project, capsys):
     assert cli.main(["optimize-length", project("socket")]) == 1
-    assert "bored piles" in capsys.readouterr().err
+    assert "piles in soil" in capsys.readouterr().err
 
 
 def test_main_py_and_the_package_share_the_command_line():
