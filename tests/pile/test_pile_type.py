@@ -69,3 +69,21 @@ def test_the_command_line_reads_every_section_of_a_nested_file(tmp_path):
     cfg = main._load_config(str(path))
     assert cfg["pile"]["D"] == 1.5
     assert cfg["loading"]["Q"] == 1234.0
+
+
+def test_a_default_title_follows_the_pile_type_but_a_users_title_stays():
+    assert "Rock-socketed" in forms.default_title("socket")
+    assert forms.default_title("socket", forms.DEFAULT_TITLES["bored"]) == \
+        forms.DEFAULT_TITLES["socket"]
+    assert forms.default_title("socket", "Bridge pier P3") == "Bridge pier P3"
+
+
+def test_reports_are_always_pdf(tmp_path):
+    from slipsurface.pile import report
+    from slipsurface.pile.socket import analyse_socket
+    socket = analyse_socket(forms.to_config({**forms.defaults(), "pile_type": "socket"}))
+    report.export_report(str(tmp_path / "r"), None, "en", socket=socket)
+    assert (tmp_path / "r.pdf").read_bytes()[:5] == b"%PDF-"
+    report.export_report(str(tmp_path / "s.html"), None, "en", socket=socket)
+    assert (tmp_path / "s.html.pdf").read_bytes()[:5] == b"%PDF-"
+    assert not hasattr(report, "export_html")

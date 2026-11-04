@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 
 from slipsurface.pile.forms import (
     defaults, to_config, from_config, project_file, study_spec, study_variables,
-    PILE_TYPES, pile_type_of,
+    PILE_TYPES, pile_type_of, default_title,
 )
 from slipsurface.pile.engine import analyse
 from slipsurface.pile.errors import PileError
@@ -325,6 +325,7 @@ class PileWindow(QMainWindow):
         if pile_type == self.pile_type:
             return
         self.values["pile_type"] = pile_type
+        self.values["title"] = default_title(pile_type, self.values.get("title", ""))
         self._set_dirty()
         self._sync_pile_type()
         self.status.showMessage(t(self.lang, "ui_pile_type_changed",
@@ -745,7 +746,7 @@ class PileWindow(QMainWindow):
             return
         path, _ = QFileDialog.getSaveFileName(
             self, t(L, "report_action"), "report.pdf",
-            "PDF (*.pdf);;HTML (*.html);;Word (*.docx)")
+            "PDF (*.pdf)")
         if not path:
             return
         try:
@@ -836,6 +837,7 @@ class PileWindow(QMainWindow):
             return
         self.values = defaults(self.lang)
         self.values["pile_type"] = pile_type
+        self.values["title"] = default_title(pile_type)
         self.last_result = None
         self.last_study = None
         self.last_socket = None

@@ -24,14 +24,14 @@ def main(argv=None) -> int:
     run = sub.add_parser("run", help="analyse a project file and print the results")
     run.add_argument("project", help="path to a .pile / .json project file")
     run.add_argument("-o", "--out", default=None,
-                     help="write a report here (.pdf / .html / .docx)")
+                     help="write a PDF report here")
     run.add_argument("--socket", action="store_true",
                      help="analyse the rock socket of the project as well")
 
     socket = sub.add_parser("socket", help="analyse the rock socket of a project file")
     socket.add_argument("project", help="path to a .pile / .json project file")
     socket.add_argument("-o", "--out", default=None,
-                        help="write a report here (.pdf / .html / .docx)")
+                        help="write a PDF report here")
 
     study = sub.add_parser("study", help="run the study defined in a project file")
     study.add_argument("project", help="path to a .pile / .json project file")

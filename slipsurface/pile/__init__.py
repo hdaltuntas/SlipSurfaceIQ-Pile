@@ -44,7 +44,7 @@ Package layout
     slipsurface.pile.study         parametric / reliability studies
     slipsurface.pile.plotting      analysis figures
     slipsurface.pile.study_plots   study figures
-    slipsurface.pile.report        calculation report: HTML, PDF, DOCX
+    slipsurface.pile.report        calculation report (PDF)
     slipsurface.pile.forms         input schema and readers (interface-independent)
 
 Run it:  slipsurface-pile run project.pile.json   (or  python -m slipsurface.pile)
