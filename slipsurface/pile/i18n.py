@@ -580,7 +580,7 @@ ENTRIES = {
     "ui_new_project": ("New project", "Yeni proje"),
     "ui_opened": ("Opened {path}", "Açıldı: {path}"),
     "ui_saved": ("Saved {path}", "Kaydedildi: {path}"),
-    "ui_language": ("Language: {lang}", "Dil: {lang}"),
+    "ui_language": ("Language: {code}", "Dil: {code}"),
     "ui_no_analysis": ("Run an analysis first.", "Önce analiz çalıştırın."),
     "ui_report_written": ("Report written to {path}", "Rapor yazıldı: {path}"),
     "ui_results_header": ("=== Analysis Results ===", "=== Analiz Sonuçları ==="),

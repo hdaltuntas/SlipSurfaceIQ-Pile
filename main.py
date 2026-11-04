@@ -56,7 +56,7 @@ def check_environment(verbose: bool = True) -> bool:
 
 def _load_config(path: str):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    from slipsurface.pile.forms import from_config, to_config
+    from slipsurface.pile.forms import to_config
     if isinstance(data, dict) and "config" in data:
         return data["config"]
     # assume flat project values or already a config
