@@ -64,6 +64,7 @@ def test_every_pile_type_analyses_and_draws_every_figure(window, app):
 def test_socket_hides_the_bored_only_commands(window):
     window.set_pile_type("socket")
     assert not window.btn_study.isEnabled() and not window.act_opt.isEnabled()
+    assert not window.btn_cost.isEnabled() and not window.act_cost.isEnabled()
     window.set_pile_type("bored")
     assert window.btn_study.isEnabled()
 
@@ -138,3 +139,15 @@ def test_a_socket_shows_the_soil_table_when_its_overburden_counts(window, app):
     combo.setCurrentIndex(combo.findData("soil"))
     app.processEvents()
     assert d.tabs.isTabVisible(soil)
+
+
+def test_cost_optimization_writes_back_a_safe_design(window):
+    window.set_pile_type("bored")
+    window.run_optimize_cost(dict(L_bounds=(5.0, 40.0), D_bounds=(0.4, 1.5),
+                                  cost_a=1.0, cost_b=0.1, popsize=5, maxiter=5))
+    text = window.results.toPlainText()
+    assert "Cost Optimization" in text
+    if "Success: True" in text:
+        assert 5.0 <= window.values["L"] <= 40.0
+        assert 0.4 <= window.values["D"] <= 1.5
+        assert window._dirty

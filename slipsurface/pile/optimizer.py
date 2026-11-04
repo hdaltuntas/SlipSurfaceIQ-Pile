@@ -130,6 +130,8 @@ def optimize_cost(
     mutation: float = 0.5,
     recombination: float = 0.7,
     polish: bool = True,
+    progress: Optional[Callable[[int, int], None]] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
     """Minimise a simple cost subject to safety (utilisation ≤ 1).
 
@@ -158,7 +160,10 @@ def optimize_cost(
         recombination=recombination,
         polish=polish,
         workers=1,
+        callback=_callback(is_cancelled, progress, maxiter),
     )
+    if is_cancelled is not None and is_cancelled():
+        raise Cancelled()
     best_L, best_D = float(result.x[0]), float(result.x[1])
     best_res = _safe_evaluate(base_config, best_L, best_D)
     util = governing_utilisation(best_res)
