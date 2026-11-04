@@ -34,6 +34,7 @@ from .config import (
     GROUP_SETTLEMENT,
     INSTALLATIONS,
     MODULUS_METHODS,
+    OVERBURDEN_FRICTION,
     SHAPES,
     SKIN_DISTRIBUTIONS,
     SOCKET_BASE_DESIGN,
@@ -323,6 +324,9 @@ def socket_groups(lang: str = "en") -> List[Group]:
             _num("rock_depth", _t(lang, "rock_depth_label"), s["rock_depth"], 0, 200, "m", 2,
                  0.5),
             _num("socket_Q", _t(lang, "socket_Q_label"), s["Q"], 1, 1e7, "kN", 1, 100),
+            _select("overburden_friction", _t(lang, "overburden_friction_label"),
+                    s["overburden_friction"],
+                    _choices(lang, "overburden", OVERBURDEN_FRICTION)),
         ], note=_t(lang, "socket_note"), when=SOCKET),
         Group(_t(lang, "group_rock"), [
             _num("qu", _t(lang, "qu_label"), s["qu"], 0.1, 400, "MPa", 1, 1),
@@ -432,6 +436,13 @@ PART_TYPES = {"options": SOIL_PILES, "socket": ["socket"], "study": SOIL_PILES,
               "soil": SOIL_PILES, "study_vars": SOIL_PILES}
 
 
+def uses_soil_profile(values: dict) -> bool:
+    """Whether the soil profile is an input: always for a pile in soil, and
+    for a socket when the friction of the soil above the rock is counted."""
+    pile_type = pile_type_of(values.get("pile_type"))
+    return pile_type in SOIL_PILES or values.get("overburden_friction") == "soil"
+
+
 def schema(lang: str = "en") -> dict:
     """The whole schema the browser builds its forms from, in one language."""
     return {
@@ -531,6 +542,7 @@ _ALLOWED = {
     "clay_method": CLAY_METHODS, "tip_method": TIP_METHODS, "group_method": GROUP_SETTLEMENT,
     "distribution": SKIN_DISTRIBUTIONS, "modulus_method": MODULUS_METHODS,
     "design": SOCKET_DESIGN, "base_design": SOCKET_BASE_DESIGN,
+    "overburden_friction": OVERBURDEN_FRICTION,
 }
 
 #: Fields that are whole numbers

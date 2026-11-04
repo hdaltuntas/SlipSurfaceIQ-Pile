@@ -50,6 +50,7 @@ import numpy as np
 from .config import (
     DEFAULT_CONFIG,
     MODULUS_METHODS,
+    OVERBURDEN_FRICTION,
     SOCKET_BASE_DESIGN,
     SOCKET_BASE_METHODS,
     SOCKET_DESIGN,
@@ -209,6 +210,7 @@ class SocketAnalysis:
     def __init__(self, config: Dict[str, Any]):
         self.config = copy.deepcopy(config)
         self.warnings: List = []
+        self._soil: Dict[str, Any] = {"Qs": 0.0, "layers": []}
         self._read()
         self.results: Dict[str, Any] = {}
 
@@ -244,6 +246,9 @@ class SocketAnalysis:
         self.FS_base = max(num(s, "FS_base", 3.0), 1.0)
         self.min_ratio = max(num(s, "min_ratio", 1.0), 0.0)
         self.weak_rock = max(num(s, "weak_rock", 5.0), 0.0)
+        self.overburden_friction = (s.get("overburden_friction")
+                                    if s.get("overburden_friction") in OVERBURDEN_FRICTION
+                                    else "none")
         self.zw = max(num(w, "depth", 0.0), 0.0)
         self.gw = num(w, "gamma_water", 9.81)
         self.buoyant = bool(o.get("buoyant_weight", True))
@@ -287,6 +292,44 @@ class SocketAnalysis:
         g_wet = self.gamma_c - (self.gw if self.buoyant else 0.0)
         return self.area * (self.gamma_c * dry + g_wet * wet)
 
+    # ------------------------------------------------------------------ overburden
+    def _overburden_shaft(self) -> Dict[str, Any]:
+        """The ultimate shaft friction in the soil above the rock [kN], by the
+        bored-pile methods (α — API RP 2A in clay, K·σ'v·tan δ in sand with the
+        default K/K0, δ/φ' and critical depth), or nothing when it is left out."""
+        none = {"Qs": 0.0, "layers": []}
+        if self.overburden_friction != "soil" or self.overburden <= 1e-6:
+            return none
+        from .engine import PileAnalysis
+        cfg = copy.deepcopy(self.config)
+        cfg["pile"] = {**DEFAULT_CONFIG["pile"], "shape": "circular", "D": self.D,
+                       "L": self.overburden, "top": self.top, "installation": "bored",
+                       "gamma_p": self.gamma_c, "Ep": self.Ec}
+        cfg["loading"] = {"Q": self.Q}
+        cfg["group"] = {**DEFAULT_CONFIG["group"], "nx": 1, "ny": 1, "block": False}
+        cfg["options"] = dict(DEFAULT_CONFIG["options"])
+        cfg["seismic"] = {**DEFAULT_CONFIG["seismic"], "enabled": False}
+        try:
+            pile = PileAnalysis(cfg)
+        except PileError as exc:
+            if exc.key == "err_tip_below":
+                raise PileError("err_socket_profile", depth=exc.params["depth"],
+                                rock=self.rock_depth) from exc
+            raise
+        shaft = pile.shaft(self.overburden)
+        method = cfg["options"]["clay_method"]
+        layers = []
+        for layer in pile.profile.layers:
+            top, bottom = max(layer["top"], self.top), min(layer["bottom"], self.rock_depth)
+            if bottom <= top:
+                continue
+            Qs = sum(row[method] * self.perimeter * row["h"] for row in shaft["slices"]
+                     if row["layer"] == layer["name"] and top <= row["z"] <= bottom)
+            layers.append({"name": layer["name"], "behaviour": layer["behaviour"],
+                           "top": layer["top"], "bottom": min(layer["bottom"], self.rock_depth),
+                           "Qs": Qs})
+        return {"Qs": shaft["Qs"][method], "layers": layers}
+
     # ------------------------------------------------------------------ pieces
     def _modulus(self) -> Dict[str, float]:
         if self.modulus_method == "direct":
@@ -319,10 +362,13 @@ class SocketAnalysis:
         qb = self._base_design(Ls)
         Qs = self.perimeter * Ls * fs
         Qb = self.area * qb
+        Qs_soil = self._soil["Qs"]
         W = self.weight(Ls) if self.subtract_weight else 0.0
-        Q_all = Qs / self.FS_side + Qb / self.FS_base - W
-        Q_ult = Qs + Qb
-        return {"Qs": Qs, "Qb": Qb, "qb": qb, "W": self.weight(Ls), "W_used": W,
+        # the soil above the rock, when it is counted, takes the side shear's FS
+        Q_all = (Qs + Qs_soil) / self.FS_side + Qb / self.FS_base - W
+        Q_ult = Qs + Qs_soil + Qb
+        return {"Qs": Qs, "Qs_soil": Qs_soil, "Qb": Qb, "qb": qb, "W": self.weight(Ls),
+                "W_used": W,
                 "Q_ult": Q_ult, "Q_ult_net": Q_ult - W, "Q_all": Q_all,
                 "FS": (Q_ult - W) / self.Q, "utilisation": self.Q / Q_all if Q_all > 0
                 else float("inf")}
@@ -370,6 +416,9 @@ class SocketAnalysis:
     # ------------------------------------------------------------------ the run
     def run(self) -> Dict[str, Any]:
         modulus = self._modulus()
+        self._soil = self._overburden_shaft()
+        if self._soil["Qs"] > 0:
+            self.warnings.append(message("warn_socket_overburden", Qs=self._soil["Qs"]))
         self.results = {"modulus": modulus}
         qu_side = min(self.qu, self.fc)
         if self.fc < self.qu:
@@ -435,6 +484,8 @@ class SocketAnalysis:
             "Ls_req": Ls_req, "Ls_min": minimum, "Ls_design": Ls_design,
             "Ls_spread": (min(lengths), max(lengths)) if lengths else (float("nan"),) * 2,
             "check": check, "settlement": settle, "warnings": self.warnings,
+            "overburden_friction": self.overburden_friction,
+            "Qs_soil": self._soil["Qs"], "overburden_layers": self._soil["layers"],
         })
         return self.results
 

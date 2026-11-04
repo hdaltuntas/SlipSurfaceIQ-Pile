@@ -592,8 +592,25 @@ class SocketPlotter(_Base):
         bottom = max(tip, deepest) + max(2.0 * D, 0.25 * tip, 1.0)
         half = max(0.45 * bottom, 3.0 * D)
         fills = self._fills()
-        ax.add_patch(Rectangle((-half, 0), 2 * half, s.rock_depth, facecolor=fills["granular"],
-                               edgecolor=th["border"], zorder=1))
+        layers = res.get("overburden_layers") or []
+        if layers:
+            # the soil profile above the rock, when its friction is counted
+            for layer in layers:
+                y0, y1 = layer["top"], layer["bottom"]
+                ax.add_patch(Rectangle((-half, y0), 2 * half, y1 - y0,
+                                       facecolor=fills[layer["behaviour"]],
+                                       edgecolor=th["border"], linewidth=0.8, zorder=1))
+                ax.text(-half * 0.97, 0.5 * (y0 + y1),
+                        f"{layer['name']}  ·  Qs = {layer['Qs']:,.0f} kN", fontsize=8,
+                        va="center", color=th["fg"], bbox=label_box(th, 0.8), zorder=6)
+            first = layers[0]["top"]
+            if first > 0:
+                ax.add_patch(Rectangle((-half, 0), 2 * half, first, facecolor=fills["granular"],
+                                       edgecolor=th["border"], zorder=1))
+        else:
+            ax.add_patch(Rectangle((-half, 0), 2 * half, s.rock_depth,
+                                   facecolor=fills["granular"], edgecolor=th["border"],
+                                   zorder=1))
         rock = Rectangle((-half, s.rock_depth), 2 * half, bottom - s.rock_depth,
                          facecolor=fills["rock"], edgecolor=th["fg_dim"], hatch="/",
                          linewidth=0, zorder=1, alpha=0.9)
@@ -601,8 +618,9 @@ class SocketPlotter(_Base):
         ax.plot([-half, half], [s.rock_depth, s.rock_depth], color=th["fg"], linewidth=1.2,
                 zorder=2)
         _ground(ax, th, -half, half)
-        ax.text(-half * 0.97, s.rock_depth / 2, self.L["plot_overburden"], fontsize=8.5,
-                va="center", color=th["fg"], bbox=label_box(th, 0.8), zorder=6)
+        if not layers:
+            ax.text(-half * 0.97, s.rock_depth / 2, self.L["plot_overburden"], fontsize=8.5,
+                    va="center", color=th["fg"], bbox=label_box(th, 0.8), zorder=6)
         ax.text(-half * 0.97, 0.5 * (s.rock_depth + bottom),
                 f"{self.L['plot_rock']}: qu = {s.qu:.1f} MPa", fontsize=8.5, va="center",
                 color=th["fg"], bbox=label_box(th, 0.8), zorder=6)

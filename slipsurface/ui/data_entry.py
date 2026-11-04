@@ -30,6 +30,7 @@ except ImportError:  # the dialog works without the preview
 
 from slipsurface.pile.forms import (
     schema, defaults, PART_TYPES, PILE_TYPES, pile_type_of, variable_choices,
+    uses_soil_profile,
 )
 from slipsurface.pile.i18n import t
 
@@ -83,7 +84,22 @@ def draw_preview(fig, values: dict) -> None:
         rock, Ls = f("rock_depth", 10.0), f("socket_Ls", 3.0)
         bottom = rock + Ls + max(2 * D, 2.0)
         half = max(0.35 * bottom, 2.5 * D)
-        ax.add_patch(Rectangle((-half, 0), 2 * half, rock, color=FILLS["granular"]))
+        drawn = 0.0
+        if values.get("overburden_friction") == "soil":
+            for row in values.get("soil_profile") or []:
+                try:
+                    h = float(row.get("thickness") or 0)
+                except (TypeError, ValueError):
+                    h = 0
+                if h <= 0 or drawn >= rock:
+                    continue
+                ax.add_patch(Rectangle((-half, drawn), 2 * half, min(h, rock - drawn),
+                                       facecolor=FILLS.get(row.get("behaviour"), "#ddd"),
+                                       edgecolor="white", linewidth=0.8))
+                drawn += h
+        if drawn < rock:
+            ax.add_patch(Rectangle((-half, drawn), 2 * half, rock - drawn,
+                                   color=FILLS["granular"]))
         ax.add_patch(Rectangle((-half, rock), 2 * half, bottom - rock, facecolor=FILLS["rock"],
                                hatch="/", edgecolor="#8f877c", linewidth=0))
         ax.add_patch(Rectangle((-D / 2, top), D, max(rock - top, 0), color="#8A8680"))
@@ -345,6 +361,10 @@ class DataEntryDialog(QDialog):
         for index, name, boxes in self._tab_parts:
             types = PART_TYPES.get(name)
             visible = types is None or pile_type in types
+            if name == "soil":
+                visible = uses_soil_profile({"pile_type": pile_type,
+                                             "overburden_friction":
+                                                 self._current("overburden_friction")})
             if visible and boxes:
                 visible = any(not gb.isHidden() for gb in boxes)
             self.tabs.setTabVisible(index, visible)
@@ -415,9 +435,8 @@ class DataEntryDialog(QDialog):
 
     def _accept(self):
         problems = []
-        for name in self.tables:
-            types = PART_TYPES.get(name)
-            if types is None or self.pile_type() in types:
+        for index, name, _boxes in self._tab_parts:
+            if name in self.tables and self.tabs.isTabVisible(index):
                 problems += self._validate_table(name)
         if problems:
             answer = QMessageBox.warning(

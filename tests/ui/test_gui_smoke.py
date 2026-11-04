@@ -126,3 +126,15 @@ def test_a_driven_pile_asks_how_it_is_installed(window, app):
     form = next(f for w, f, _ in d._conditional_fields if w is d.fields["installation"])
     assert form.isRowVisible(d.fields["installation"])
     assert d.collect()["pile_type"] == "driven"
+
+
+def test_a_socket_shows_the_soil_table_when_its_overburden_counts(window, app):
+    from slipsurface.ui.data_entry import DataEntryDialog
+    window.values["pile_type"] = "socket"
+    d = DataEntryDialog(window, "en", window.values)
+    soil = next(i for i, name, _ in d._tab_parts if name == "soil")
+    assert not d.tabs.isTabVisible(soil)
+    combo = d.fields["overburden_friction"]
+    combo.setCurrentIndex(combo.findData("soil"))
+    app.processEvents()
+    assert d.tabs.isTabVisible(soil)
