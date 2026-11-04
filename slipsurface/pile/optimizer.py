@@ -10,13 +10,36 @@ that can also vary diameter and is more efficient for multi-variable cases.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
 from scipy.optimize import differential_evolution
 
 from .engine import PileAnalysis, PileError
-from .forms import to_config
+
+
+def governing_utilisation(res: Dict[str, Any]) -> float:
+    """The largest utilisation of the checks the engine's required length uses:
+    the single pile, the group, and the seismic compression when it is on."""
+    group = res.get("group") if isinstance(res.get("group"), dict) else {}
+    seismic = res.get("seismic") if isinstance(res.get("seismic"), dict) else {}
+    return max(res.get("utilisation", 1e6), group.get("utilisation", 1e6),
+               seismic.get("utilisation", 0.0))
+
+
+class Cancelled(Exception):
+    """The user stopped the optimisation."""
+
+
+def _callback(is_cancelled, progress, maxiter):
+    state = {"it": 0}
+
+    def callback(*_args, **_kwargs):
+        state["it"] += 1
+        if progress is not None:
+            progress(min(state["it"], maxiter), maxiter)
+        return bool(is_cancelled is not None and is_cancelled())
+    return callback
 
 
 def _safe_evaluate(cfg: Dict[str, Any], L: float, D: Optional[float] = None) -> Dict[str, Any]:
@@ -46,6 +69,8 @@ def optimize_length(
     mutation: float = 0.5,
     recombination: float = 0.7,
     polish: bool = True,
+    progress: Optional[Callable[[int, int], None]] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
     """Find the shortest L that satisfies utilisation ≤ 1 (pile + group).
 
@@ -54,8 +79,7 @@ def optimize_length(
     def objective(x: np.ndarray) -> float:
         L = float(x[0])
         res = _safe_evaluate(base_config, L)
-        util = max(res.get("utilisation", 1e6),
-                   res.get("group", {}).get("utilisation", 1e6) if isinstance(res.get("group"), dict) else 1e6)
+        util = governing_utilisation(res)
         # Penalise unsafe designs heavily; among safe ones minimise L
         if util > 1.0 + 1e-6:
             return 1000.0 + L + 100.0 * (util - 1.0)
@@ -74,11 +98,13 @@ def optimize_length(
         recombination=recombination,
         polish=polish,
         workers=1,
+        callback=_callback(is_cancelled, progress, maxiter),
     )
+    if is_cancelled is not None and is_cancelled():
+        raise Cancelled()
     best_L = float(result.x[0])
     best_res = _safe_evaluate(base_config, best_L)
-    util = max(best_res.get("utilisation", 1e6),
-               best_res.get("group", {}).get("utilisation", 1e6) if isinstance(best_res.get("group"), dict) else 1e6)
+    util = governing_utilisation(best_res)
     success = util <= 1.0 + 1e-4
     return {
         "best_L": best_L,
@@ -113,8 +139,7 @@ def optimize_cost(
     def objective(x: np.ndarray) -> float:
         L, D = float(x[0]), float(x[1])
         res = _safe_evaluate(base_config, L, D)
-        util = max(res.get("utilisation", 1e6),
-                   res.get("group", {}).get("utilisation", 1e6) if isinstance(res.get("group"), dict) else 1e6)
+        util = governing_utilisation(res)
         cost = cost_a * L * D ** 2 + cost_b * L
         if util > 1.0 + 1e-6:
             return 1000.0 + cost + 50.0 * (util - 1.0)
@@ -136,8 +161,7 @@ def optimize_cost(
     )
     best_L, best_D = float(result.x[0]), float(result.x[1])
     best_res = _safe_evaluate(base_config, best_L, best_D)
-    util = max(best_res.get("utilisation", 1e6),
-               best_res.get("group", {}).get("utilisation", 1e6) if isinstance(best_res.get("group"), dict) else 1e6)
+    util = governing_utilisation(best_res)
     success = util <= 1.0 + 1e-4
     cost = cost_a * best_L * best_D ** 2 + cost_b * best_L
     return {

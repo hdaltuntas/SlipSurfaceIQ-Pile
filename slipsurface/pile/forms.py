@@ -48,6 +48,28 @@ FILE_FORMAT = "slipsurface-pile"
 READ_FORMATS = (FILE_FORMAT, "slipsurface-pile")
 FILE_VERSION = "0.1"
 
+#: The pile types the program analyses. The type is chosen before anything
+#: else: it decides which inputs the forms show, which analysis runs, and which
+#: results and figures come back.
+#:   bored   — a bored (cast-in-place) pile, or a group of them, in a layered
+#:             soil profile: axial capacity, group action, settlement, seismic
+#:   socket  — a pile socketed into rock: side shear, base, socket length and
+#:             settlement of the socket
+PILE_TYPES = ["bored", "socket"]
+
+#: Older project files called the bored pile a "pile in soil"
+_LEGACY_PILE_TYPES = {"soil": "bored"}
+
+#: Condition shorthands for the schema
+BORED = [("pile_type", ["bored"])]
+SOCKET = [("pile_type", ["socket"])]
+
+
+def pile_type_of(value) -> str:
+    """A pile type from whatever a form or a file carries; unknown is bored."""
+    text = _LEGACY_PILE_TYPES.get(str(value or ""), str(value or ""))
+    return text if text in PILE_TYPES else PILE_TYPES[0]
+
 
 def _t(lang: str, key: str) -> str:
     return TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, key)
@@ -75,8 +97,10 @@ class Field:
     def to_dict(self) -> dict:
         """Only what the browser needs; empty values are left out."""
         keep = ("key", "label", "kind", "default", "decimals")
+        # A bound of 0 is a real bound (thickness, depth ≥ 0), so only None,
+        # empty strings and empty lists are left out.
         return {k: v for k, v in asdict(self).items()
-                if k in keep or v not in ("", None, [], 0.0)}
+                if k in keep or (v is not None and not (isinstance(v, (str, list)) and not v))}
 
 
 @dataclass
@@ -86,6 +110,10 @@ class Group:
     fields: List[Field]
     note: str = ""
     when: List[Dict[str, Any]] = field(default_factory=list)
+
+    def __post_init__(self):
+        self.when = _when(self.when) if self.when and isinstance(self.when[0], tuple) \
+            else self.when
 
     def to_dict(self) -> dict:
         d = {"title": self.title, "fields": [f.to_dict() for f in self.fields]}
@@ -142,34 +170,45 @@ def base_design_choices(lang: str) -> list:
 
 def project_groups(lang: str = "en") -> List[Group]:
     info = DEFAULT_CONFIG["project_info"]
-    return [Group(_t(lang, "group_project"), [
-        _text("title", _t(lang, "title_label"), info["title"]),
-        _text("analyst", _t(lang, "analyst_label"), info["analyst"]),
-    ])]
+    w = DEFAULT_CONFIG["groundwater"]
+    return [
+        Group(_t(lang, "group_project"), [
+            _text("title", _t(lang, "title_label"), info["title"]),
+            _text("analyst", _t(lang, "analyst_label"), info["analyst"]),
+        ]),
+        # The water table is site data: both pile types use it.
+        Group(_t(lang, "group_water"), [
+            _num("water_depth", _t(lang, "water_depth_label"), w["depth"], 0, 500, "m", 2, 0.1),
+            _num("gamma_water", _t(lang, "gamma_w_label"), w["gamma_water"], 9, 11,
+                 "kN/m³", 2, 0.01),
+        ]),
+    ]
+
+
+def pile_type_group(lang: str = "en") -> Group:
+    """The first choice of every project: which kind of pile is analysed."""
+    return Group(_t(lang, "group_pile_type"), [
+        _select("pile_type", _t(lang, "pile_type_label"), PILE_TYPES[0],
+                _choices(lang, "pile_type", PILE_TYPES)),
+    ], note=_t(lang, "pile_type_note"))
 
 
 def pile_groups(lang: str = "en") -> List[Group]:
     p = DEFAULT_CONFIG["pile"]
     g = DEFAULT_CONFIG["group"]
-    w = DEFAULT_CONFIG["groundwater"]
     return [
         Group(_t(lang, "group_pile"), [
-            _select("pile_type", _t(lang, "pile_type_label"), "soil",
-                    [("soil", _t(lang, "pile_type_soil")),
-                     ("socket", _t(lang, "pile_type_socket"))]),
             _select("shape", _t(lang, "shape_label"), p["shape"],
                     _choices(lang, "shape", SHAPES)),
             _num("D", _t(lang, "D_label"), p["D"], 0.1, 5, "m", 2, 0.05),
             _num("L", _t(lang, "L_label"), p["L"], 0.5, 200, "m", 2, 0.5),
             _num("top", _t(lang, "top_label"), p["top"], 0, 50, "m", 2, 0.1),
-            _select("installation", _t(lang, "installation_label"), p["installation"],
-                    _choices(lang, "installation", INSTALLATIONS)),
             _num("gamma_p", _t(lang, "gamma_p_label"), p["gamma_p"], 1, 100, "kN/m³", 1, 0.5),
             _num("Ep", _t(lang, "Ep_label"), p["Ep"], 100, 300000, "MPa", 0, 1000),
-        ], note=_t(lang, "pile_note")),
+        ], note=_t(lang, "pile_note"), when=BORED),
         Group(_t(lang, "group_loading"), [
             _num("Q", _t(lang, "Q_label"), DEFAULT_CONFIG["loading"]["Q"], 1, 1e7, "kN", 1, 100),
-        ], note=_t(lang, "loading_note")),
+        ], note=_t(lang, "loading_note"), when=BORED),
         Group(_t(lang, "group_group"), [
             _num("nx", _t(lang, "nx_label"), g["nx"], 1, 50, "", 0, 1),
             _num("ny", _t(lang, "ny_label"), g["ny"], 1, 50, "", 0, 1),
@@ -178,12 +217,7 @@ def pile_groups(lang: str = "en") -> List[Group]:
             _select("efficiency", _t(lang, "efficiency_label"), g["efficiency"],
                     _choices(lang, "eff", EFFICIENCY_METHODS)),
             _check("block", _t(lang, "block_label"), g["block"]),
-        ], note=_t(lang, "group_note")),
-        Group(_t(lang, "group_water"), [
-            _num("water_depth", _t(lang, "water_depth_label"), w["depth"], 0, 500, "m", 2, 0.1),
-            _num("gamma_water", _t(lang, "gamma_w_label"), w["gamma_water"], 9, 11,
-                 "kN/m³", 2, 0.01),
-        ]),
+        ], note=_t(lang, "group_note"), when=BORED),
     ]
 
 
@@ -208,11 +242,11 @@ def option_groups(lang: str = "en") -> List[Group]:
             _num("zc_ratio", _t(lang, "zc_ratio_label"), o["zc_ratio"], 1, 50, "", 1, 1,
                  when=[("critical_depth", [True])]),
             _check("spt_method", _t(lang, "spt_method_label"), o["spt_method"]),
-        ], note=_t(lang, "methods_note")),
+        ], note=_t(lang, "methods_note"), when=BORED),
         Group(_t(lang, "group_weight"), [
             _check("subtract_weight", _t(lang, "subtract_weight_label"), o["subtract_weight"]),
             _check("buoyant_weight", _t(lang, "buoyant_weight_label"), o["buoyant_weight"]),
-        ], note=_t(lang, "weight_note")),
+        ], note=_t(lang, "weight_note"), when=BORED),
         Group(_t(lang, "group_settlement"), [
             _select("group_method", _t(lang, "group_method_label"), s["group_method"],
                     _choices(lang, "gs", GROUP_SETTLEMENT)),
@@ -221,14 +255,14 @@ def option_groups(lang: str = "en") -> List[Group]:
             _num("spread", _t(lang, "spread_label"), s["spread"], 0.5, 10, "", 1, 0.5),
             _select("distribution", _t(lang, "distribution_label"), s["distribution"],
                     _choices(lang, "distribution", SKIN_DISTRIBUTIONS)),
-        ], note=_t(lang, "settlement_note")),
+        ], note=_t(lang, "settlement_note"), when=BORED),
         seismic_group(lang),
         Group(_t(lang, "group_criteria"), [
             _num("FS", _t(lang, "FS_label"), c["FS"], 1, 10, "", 2, 0.1),
             _num("s_allow", _t(lang, "s_allow_label"), c["s_allow"], 1, 500, "mm", 1, 5),
             _num("L_min", _t(lang, "L_min_label"), c["L_min"], 0.5, 100, "m", 2, 0.5),
             _num("L_step", _t(lang, "L_step_label"), c["L_step"], 0.05, 5, "m", 2, 0.05),
-        ], note=_t(lang, "criteria_note")),
+        ], note=_t(lang, "criteria_note"), when=BORED),
     ]
 
 
@@ -249,7 +283,7 @@ def seismic_group(lang: str = "en") -> Group:
              when=on),
         _num("FS_E_t", _t(lang, "FS_E_t_label"), e["FS_tension"], 1, 10, "", 2, 0.1,
              when=on),
-    ], note=_t(lang, "seismic_note"))
+    ], note=_t(lang, "seismic_note"), when=BORED)
 
 
 def socket_groups(lang: str = "en") -> List[Group]:
@@ -262,7 +296,7 @@ def socket_groups(lang: str = "en") -> List[Group]:
             _num("rock_depth", _t(lang, "rock_depth_label"), s["rock_depth"], 0, 200, "m", 2,
                  0.5),
             _num("socket_Q", _t(lang, "socket_Q_label"), s["Q"], 1, 1e7, "kN", 1, 100),
-        ], note=_t(lang, "socket_note")),
+        ], note=_t(lang, "socket_note"), when=SOCKET),
         Group(_t(lang, "group_rock"), [
             _num("qu", _t(lang, "qu_label"), s["qu"], 0.1, 400, "MPa", 1, 1),
             _select("modulus_method", _t(lang, "modulus_method_label"), s["modulus_method"],
@@ -280,12 +314,12 @@ def socket_groups(lang: str = "en") -> List[Group]:
             _num("Eb_ratio", _t(lang, "Eb_ratio_label"), s["Eb_ratio"], 0.01, 10, "", 2, 0.1),
             _num("spacing", _t(lang, "spacing_label"), s["spacing"], 0.01, 10, "m", 2, 0.1),
             _num("aperture", _t(lang, "aperture_label"), s["aperture"], 0, 50, "mm", 1, 0.5),
-        ], note=_t(lang, "rock_note")),
+        ], note=_t(lang, "rock_note"), when=SOCKET),
         Group(_t(lang, "group_concrete"), [
             _num("fc", _t(lang, "fc_label"), s["fc"], 5, 150, "MPa", 1, 5),
             _num("Ec", _t(lang, "Ec_label"), s["Ec"], 1000, 100000, "MPa", 0, 1000),
             _num("gamma_c", _t(lang, "gamma_c_label"), s["gamma_c"], 1, 100, "kN/m³", 1, 0.5),
-        ]),
+        ], when=SOCKET),
         Group(_t(lang, "group_socket_design"), [
             _select("design", _t(lang, "design_label"), s["design"], design_choices(lang)),
             _select("base_design", _t(lang, "base_design_label"), s["base_design"],
@@ -295,7 +329,7 @@ def socket_groups(lang: str = "en") -> List[Group]:
             _num("min_ratio", _t(lang, "min_ratio_label"), s["min_ratio"], 0, 10, "", 2, 0.25),
             _num("weak_rock", _t(lang, "weak_rock_label"), s["weak_rock"], 0, 100, "MPa", 1,
                  0.5),
-        ], note=_t(lang, "socket_design_note")),
+        ], note=_t(lang, "socket_design_note"), when=SOCKET),
     ]
 
 
@@ -306,7 +340,7 @@ def study_groups(lang: str = "en") -> List[Group]:
                 [(m, _t(lang, f"sampling_{m}")) for m in SAMPLING]),
         _num("study_n", _t(lang, "study_n"), 200, 3, 100000, "", 0, 50),
         _num("study_seed", _t(lang, "study_seed"), 0, 0, 10 ** 6, "", 0, 1),
-    ], note=_t(lang, "study_note"))]
+    ], note=_t(lang, "study_note"), when=BORED)]
 
 
 # --------------------------------------------------------------------------- #
@@ -365,10 +399,16 @@ def default_soil_rows() -> List[dict]:
 #: The parts of the schema made of groups of fields
 PARTS = ("project", "pile", "options", "socket", "study")
 
+#: The pile types each part and table of the schema belongs to; a part that is
+#: not listed applies to every type.
+PART_TYPES = {"options": ["bored"], "socket": ["socket"], "study": ["bored"],
+              "soil": ["bored"], "study_vars": ["bored"]}
+
 
 def schema(lang: str = "en") -> dict:
     """The whole schema the browser builds its forms from, in one language."""
     return {
+        "pile_type": pile_type_group(lang).to_dict(),
         "project": {"groups": [g.to_dict() for g in project_groups(lang)]},
         "pile": {"groups": [g.to_dict() for g in pile_groups(lang)]},
         "options": {"groups": [g.to_dict() for g in option_groups(lang)]},
@@ -382,7 +422,8 @@ def schema(lang: str = "en") -> dict:
 
 
 def _all_groups(lang: str = "en") -> List[Group]:
-    return (project_groups(lang) + pile_groups(lang) + option_groups(lang)
+    return ([pile_type_group(lang)] + project_groups(lang) + pile_groups(lang)
+            + option_groups(lang)
             + socket_groups(lang) + study_groups(lang))
 
 
@@ -486,6 +527,10 @@ def to_config(values: dict) -> Dict[str, Any]:
         else:
             cfg[section][key] = _f(values, flat, default)
     cfg["soil_profile"] = read_soil_profile(values)
+    cfg["pile_type"] = pile_type_of(values.get("pile_type"))
+    if cfg["pile_type"] == "bored":
+        # The program analyses bored piles: the installation follows the type.
+        cfg["pile"]["installation"] = "bored"
     return cfg
 
 
@@ -495,6 +540,8 @@ def from_config(cfg: dict, base: Optional[dict] = None) -> Dict[str, Any]:
     Whatever the file does not carry keeps its default.
     """
     values = dict(base) if base is not None else defaults()
+    if "pile_type" in cfg:
+        values["pile_type"] = pile_type_of(cfg.get("pile_type"))
     for flat, section, key in _MAP:
         if key in (cfg.get(section) or {}):
             values[flat] = cfg[section][key]

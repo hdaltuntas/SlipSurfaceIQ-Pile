@@ -67,10 +67,11 @@ MODULUS_METHODS = ["rqd", "gsi", "direct"]
 ACCENT = "#5B7A3A"  # the colour of its group in the suite (foundations)
 
 THEMES = {
-    "dark": dict(bg="#262624", panel="#30302E", input_bg="#262624", fg="#F5F4ED",
-                 fg_dim="#A6A39A", border="#4A4944", hover="#3A3A37", btn="#3A3A37",
-                 muted="#6B6A64", accent="#9BBA78", accent_hover="#AECB8D"),
-    "light": dict(bg="#F5F4ED", panel="#FAF9F5", input_bg="#FFFFFF", fg="#141413",
+    # The figure background matches the desktop interface's card colour.
+    "dark": dict(bg="#1f2937", panel="#111827", input_bg="#111827", fg="#F9FAFB",
+                 fg_dim="#9CA3AF", border="#374151", hover="#374151", btn="#374151",
+                 muted="#6B7280", accent="#9BBA78", accent_hover="#AECB8D"),
+    "light": dict(bg="#FFFFFF", panel="#FAF9F5", input_bg="#FFFFFF", fg="#141413",
                   fg_dim="#73726C", border="#E3E0D5", hover="#F0EEE6", btn="#F0EEE6",
                   muted="#B7B4AA", accent=ACCENT, accent_hover="#4A6630"),
 }

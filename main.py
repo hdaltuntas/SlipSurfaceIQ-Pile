@@ -56,17 +56,32 @@ def check_environment(verbose: bool = True) -> bool:
 
 def _load_config(path: str):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    from slipsurface.pile.forms import to_config
+    from slipsurface.pile.forms import from_config, to_config
     if isinstance(data, dict) and "config" in data:
-        return data["config"]
-    # assume flat project values or already a config
-    if "pile" in data or "soil_profile" in data:
-        return to_config(data)
-    return data
+        data = data["config"]
+    if isinstance(data, dict) and ("pile" in data or "soil_profile" in data
+                                   or "socket" in data):
+        # A nested project file: read it into flat values first, so that every
+        # section the file carries is used (to_config alone reads flat keys and
+        # would silently fall back to the defaults).
+        return to_config(from_config(data))
+    # flat values, as the interface keeps them
+    return to_config(data)
 
 
 def cmd_analyze(args) -> int:
     cfg = _load_config(args.project)
+    if cfg.get("pile_type") == "socket":
+        from slipsurface.pile.socket import analyse_socket
+        res = analyse_socket(cfg).results
+        print(json.dumps({
+            "pile_type": "socket",
+            "Ls_design": res.get("Ls_design"),
+            "fs_design": res.get("fs_design"),
+            "check": res.get("check"),
+            "settlement_mm": 1000 * res["settlement"]["rw"]["total"],
+        }, indent=2, default=str))
+        return 0
     from slipsurface.pile.engine import analyse
     result = analyse(cfg)
     res = result.results if hasattr(result, "results") else result
