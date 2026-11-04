@@ -47,7 +47,7 @@ Package layout
     slipsurface.pile.report        calculation report (PDF)
     slipsurface.pile.forms         input schema and readers (interface-independent)
 
-Run it:  slipsurface-pile run project.pile.json   (or  python -m slipsurface.pile)
+Run it:  python main.py [command]   (or  python -m slipsurface.pile [command])
 """
 
 from slipsurface.versioning import module_version
