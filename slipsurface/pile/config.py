@@ -64,6 +64,8 @@ MODULUS_METHODS = ["rqd", "gsi", "direct"]
 
 #: Whether the soil above the rock adds shaft friction to a socketed pile
 OVERBURDEN_FRICTION = ["none", "soil"]
+# A rock socket is never shorter than this many pile diameters.
+MIN_SOCKET_RATIO = 3.0
 
 # --- Interface theme and plot palette --------------------------------------
 # --- kept together so the figures always match the page they are shown on. -
@@ -235,7 +237,7 @@ DEFAULT_CONFIG = {
         "base_design": "min",
         "FS_side": 2.5,
         "FS_base": 3.0,
-        "min_ratio": 1.0,          # the socket is at least this many diameters long
+        "min_ratio": 3.0,          # the socket is at least this many diameters long (≥ 3)
         "weak_rock": 5.0,          # the linear rules hold below this qu [MPa]
     },
 }
