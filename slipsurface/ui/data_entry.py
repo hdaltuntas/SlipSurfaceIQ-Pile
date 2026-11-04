@@ -12,6 +12,9 @@ from PySide6.QtWidgets import (
 
 from slipsurface.pile.forms import schema, defaults
 
+#: Schema table name -> flat key the values dictionary uses
+TABLE_VALUE_KEYS = {"soil": "soil_profile", "study_vars": "study_variables"}
+
 
 class DataEntryDialog(QDialog):
     def __init__(self, parent=None, lang: str = "en", values: dict | None = None):
@@ -40,6 +43,8 @@ class DataEntryDialog(QDialog):
         for part in ("project", "pile", "options", "socket", "study"):
             if part in sch and "groups" in sch[part]:
                 self.tabs.addTab(self._make_groups_page(part, sch[part]), part.capitalize())
+        if "study_vars" in sch and "columns" in sch["study_vars"]:
+            self.tabs.addTab(self._make_table_page("study_vars", sch["study_vars"]), "Study Variables")
 
     def _make_table_page(self, name: str, spec: dict) -> QWidget:
         scroll = QScrollArea()
@@ -54,7 +59,8 @@ class DataEntryDialog(QDialog):
         cols = spec.get("columns", [])
         table.setColumnCount(len(cols))
         table.setHorizontalHeaderLabels([c.get("label", c["key"]) for c in cols])
-        rows = spec.get("rows", []) or self.values.get(name, [])
+        value_key = TABLE_VALUE_KEYS.get(name, name)
+        rows = self.values.get(value_key) or spec.get("rows", [])
         table.setRowCount(max(len(rows), 4))
         for r, row in enumerate(rows):
             for c, col in enumerate(cols):
@@ -122,6 +128,7 @@ class DataEntryDialog(QDialog):
             except RuntimeError:
                 pass
         for name, table in self.tables.items():
+            value_key = TABLE_VALUE_KEYS.get(name, name)
             sch = schema(self.lang).get(name, {})
             cols = sch.get("columns", [])
             rows = []
@@ -144,5 +151,5 @@ class DataEntryDialog(QDialog):
                         has = True
                 if has:
                     rows.append(row)
-            vals[name] = rows
+            vals[value_key] = rows
         return vals

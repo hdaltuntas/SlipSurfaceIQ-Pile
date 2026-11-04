@@ -18,11 +18,6 @@ BLUE = QColor("#2f6fd6")
 GREEN = QColor("#2e9d4f")
 ORANGE = QColor("#f08a24")
 
-INK = QColor("#2d3a4a")
-BLUE = QColor("#2f6fd6")
-GREEN = QColor("#2e9d4f")
-ORANGE = QColor("#f08a24")
-
 
 def _pen(c=INK, w=4.0):
     p = QPen(c, w)
