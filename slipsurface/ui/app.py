@@ -41,6 +41,7 @@ from slipsurface.pile.socket import analyse_socket
 from slipsurface.pile import summary as summary_mod
 from slipsurface.pile.study import Study
 from slipsurface.pile import study as study_mod
+from slipsurface.pile import study_plots
 from slipsurface.pile.i18n import t, TRANSLATIONS
 from slipsurface.pile import report as report_mod
 from slipsurface.pile import APP_NAME, __version__
@@ -200,11 +201,17 @@ def figure_label(lang: str, key: str) -> str:
     return TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(f"fig_{key}", key)
 
 
-def figure_keys(pile_type: str, analysis=None) -> list:
-    """The figures that belong to the pile type (and to the analysis just run)."""
+#: Prefix of the study figures in the figure list
+STUDY_PREFIX = "study_"
+
+
+def figure_keys(pile_type: str, analysis=None, study=None) -> list:
+    """The figures that belong to the pile type, the analysis just run and,
+    for a bored pile, the study just run."""
     if pile_type == "socket":
         return list(SOCKET_PLOT_KEYS)
-    return available_figures(analysis)
+    keys = available_figures(analysis) if analysis is not None else []
+    return keys + [STUDY_PREFIX + view for view in study_plots.views(study)]
 
 
 def error_box(parent, title: str, exc: Exception, lang: str) -> None:
@@ -402,6 +409,14 @@ class PileWindow(QMainWindow):
         self.plot_combo.setMinimumWidth(320)
         self.plot_combo.currentIndexChanged.connect(self._update_plot)
         top.addWidget(self.plot_combo)
+        # which output a study figure shows: FS, utilisation, settlement …
+        self.lbl_output = QLabel()
+        self.output_combo = QComboBox()
+        self.output_combo.setMinimumWidth(220)
+        self.output_combo.currentIndexChanged.connect(self._update_plot)
+        top.addSpacing(12)
+        top.addWidget(self.lbl_output)
+        top.addWidget(self.output_combo)
         top.addStretch()
         pl.addLayout(top)
         if HAS_MPL:
@@ -546,6 +561,7 @@ class PileWindow(QMainWindow):
         self.tabs.setTabText(0, t(L, "ui_results_tab"))
         self.tabs.setTabText(1, t(L, "ui_plots_tab"))
         self.lbl_figure.setText(t(L, "ui_figure"))
+        self.lbl_output.setText(t(L, "ui_study_output"))
         self.results.setPlaceholderText(t(L, "ui_ready"))
         for a, key in self._actions:
             a.setText(t(L, "ui_light_mode") if key == "ui_dark_mode" and self._dark
@@ -600,10 +616,11 @@ class PileWindow(QMainWindow):
             self.interpret.set_analysis(self._current_analysis(), self.lang, self.pile_type,
                                         self.theme)
 
-    def _fill_plot_combo(self):
-        current = self.plot_combo.currentData()
-        keys = figure_keys(self.pile_type, self.last_result
-                           if self.pile_type == "bored" else None)
+    def _fill_plot_combo(self, select: str | None = None):
+        current = select or self.plot_combo.currentData()
+        bored = self.pile_type == "bored"
+        keys = figure_keys(self.pile_type, self.last_result if bored else None,
+                           self.last_study if bored else None)
         self.plot_combo.blockSignals(True)
         self.plot_combo.clear()
         for key in keys:
@@ -611,6 +628,27 @@ class PileWindow(QMainWindow):
         index = self.plot_combo.findData(current)
         self.plot_combo.setCurrentIndex(max(index, 0))
         self.plot_combo.blockSignals(False)
+        self._fill_output_combo()
+
+    def _fill_output_combo(self):
+        """The outputs a study figure can show; hidden for the other figures."""
+        study = self.last_study if self.pile_type == "bored" else None
+        outputs = study_plots.default_outputs(study) if study is not None else []
+        current = self.output_combo.currentData()
+        names = TRANSLATIONS.get(self.lang, TRANSLATIONS["en"])
+        self.output_combo.blockSignals(True)
+        self.output_combo.clear()
+        for key in outputs:
+            self.output_combo.addItem(names.get(f"out_{key}", key), key)
+        self.output_combo.setCurrentIndex(max(self.output_combo.findData(current), 0))
+        self.output_combo.blockSignals(False)
+        self._show_output_combo()
+
+    def _show_output_combo(self):
+        key = self.plot_combo.currentData() or ""
+        visible = key.startswith(STUDY_PREFIX) and self.output_combo.count() > 0
+        self.lbl_output.setVisible(visible)
+        self.output_combo.setVisible(visible)
 
     def run_analysis(self):
         """Runs the analysis of the chosen pile type."""
@@ -649,10 +687,15 @@ class PileWindow(QMainWindow):
         if not HAS_MPL:
             return
         key = self.plot_combo.currentData()
+        self._show_output_combo()
         self.fig.clear()
         try:
             analysis = self._current_analysis()
-            if key is None or analysis is None:
+            if key is not None and key.startswith(STUDY_PREFIX) and self.last_study is not None:
+                study_plots.draw(key[len(STUDY_PREFIX):], self.fig, self.last_study,
+                                 TRANSLATIONS.get(self.lang, TRANSLATIONS["en"]),
+                                 self.output_combo.currentData() or "FS", theme=self.theme)
+            elif key is None or analysis is None:
                 ax = self.fig.add_subplot(111)
                 ax.axis("off")
                 ax.text(0.5, 0.5, t(self.lang, "ui_no_figure"), ha="center", va="center",
@@ -694,24 +737,12 @@ class PileWindow(QMainWindow):
                     return
                 raise result
             self.last_study = study
-            s = study.summary
-            lines = [t(L, "ui_study_header"),
-                     t(L, "st_info", method=study.method, n=s.get("n_total", 0),
-                       ok=s.get("n_ok", 0))]
-            rel = s.get("reliability") or {}
-            if rel:
-                lines.append("\n" + t(L, "st_rel_title"))
-                for key, r in rel.items():
-                    label = TRANSLATIONS.get(L, TRANSLATIONS["en"]).get("out_" + key, key)
-                    lines.append(f"  {label}: pf = {r.get('pf', float('nan')):.4f}, "
-                                 f"β = {r.get('beta', float('nan')):.2f}")
-            stats = s.get("stats") or {}
-            if stats:
-                lines.append("\n" + t(L, "st_stats_title"))
-                for key, st in stats.items():
-                    lines.append(f"  {key}: mean {st['mean']:.2f}, std {st['std']:.2f}, "
-                                 f"p5 {st['p5']:.2f}, p95 {st['p95']:.2f} {st.get('unit', '')}")
-            self.results.setPlainText("\n".join(lines))
+            self.results.setPlainText(study_plots.summary_text(
+                study, TRANSLATIONS.get(L, TRANSLATIONS["en"])))
+            # the study's figures join the list, the distribution shown first
+            views = study_plots.views(study)
+            self._fill_plot_combo(select=STUDY_PREFIX + views[0] if views else None)
+            self._update_plot()
             self.status.showMessage(t(L, "study_done", n=len(study.rows)))
         except Exception as e:
             QMessageBox.critical(self, t(L, "study_run"),

@@ -11,7 +11,7 @@ Standalone desktop program extracted from SlipSurfaceIQ-Suite, with a light PySi
 - Group efficiency and block failure
 - Single-pile and group settlement
 - Rock-socketed piles
-- Parametric / reliability studies
+- Parametric / reliability studies, with their figures (distribution, scatter, sensitivities, one-at-a-time sweeps) in the main window for any output
 - **Automatic optimization** (differential evolution)
 - **Interactive plots** (section, profile, methods, length curve, group, settlement, seismic)
 - LE-style desktop GUI (Fusion, light palette, menus, toolbar, docks)
@@ -39,6 +39,15 @@ Or check dependencies:
 ```bash
 python main.py --check
 ```
+
+## Development
+
+```bash
+python -m pip install pytest
+python -m pytest -q          # engine, forms and headless GUI tests (Qt offscreen)
+```
+
+GitHub Actions runs the tests on Python 3.10 and 3.12 for every pull request and push to `main`.
 
 ## Project layout
 
