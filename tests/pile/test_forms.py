@@ -57,19 +57,18 @@ def test_rows_without_a_thickness_are_dropped():
     assert len(forms.read_soil_profile(values)) == len(DEFAULT_CONFIG["soil_profile"])
 
 
-def test_every_label_exists_in_both_languages():
-    for lang in ("en", "tr"):
-        schema = forms.schema(lang)
-        for part in forms.PARTS:
-            for group in schema[part]["groups"]:
-                assert group["title"] and group["title"] not in TRANSLATIONS[lang]
-                for field in group["fields"]:
-                    assert field["label"] and not field["label"].endswith("_label"), \
-                        field["key"]
-                    for option in field.get("options", []):
-                        assert "_" not in option["label"] or " " in option["label"], option
-        for column in schema["soil"]["columns"]:
-            assert not column["label"].startswith("col_")
+def test_every_label_is_a_real_text():
+    schema = forms.schema("en")
+    for part in forms.PARTS:
+        for group in schema[part]["groups"]:
+            assert group["title"] and group["title"] not in TRANSLATIONS["en"]
+            for field in group["fields"]:
+                assert field["label"] and not field["label"].endswith("_label"), \
+                    field["key"]
+                for option in field.get("options", []):
+                    assert "_" not in option["label"] or " " in option["label"], option
+    for column in schema["soil"]["columns"]:
+        assert not column["label"].startswith("col_")
 
 
 def test_every_condition_names_a_field_that_exists():

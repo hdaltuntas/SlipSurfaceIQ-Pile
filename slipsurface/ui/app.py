@@ -254,7 +254,7 @@ class PileWindow(QMainWindow):
         act_export = act("export", "ui_export_plot", self.export_plot)
         act_report = act("report", "report_action", self.export_report)
         act_help = act("help", "ui_help", self.show_help)
-        act_lang = act("language", "ui_menu_language", self.toggle_language)
+        act_about = act("help", "ui_about", self.show_about)
 
         # Dark mode icon (custom)
         pm = QPixmap(24, 24)
@@ -289,8 +289,8 @@ class PileWindow(QMainWindow):
         tb.addAction(act_report)
         tb.addSeparator()
         tb.addAction(act_dark)
-        tb.addAction(act_lang)
         tb.addAction(act_help)
+        tb.addAction(act_about)
 
     def _build_menu(self):
         menu = self.menuBar()
@@ -307,10 +307,10 @@ class PileWindow(QMainWindow):
         file_m.addSeparator()
         self._file_actions.append(file_m.addAction("report", self.export_report))
         self._file_keys.append("report_action")
-        lang_m = menu.addMenu("&Language")
-        self._menus.append((lang_m, "ui_menu_language"))
-        lang_m.addAction("English", lambda: self.set_language("en"))
-        lang_m.addAction("Türkçe", lambda: self.set_language("tr"))
+        help_m = menu.addMenu("&Help")
+        self._menus.append((help_m, "ui_help"))
+        help_m.addAction("Help", self.show_help)
+        help_m.addAction("About…", self.show_about)
         view_m = menu.addMenu("&View")
         self._menus.append((view_m, "ui_menu_view"))
         view_m.addAction("Interpret", self.open_interpret)
@@ -340,12 +340,10 @@ class PileWindow(QMainWindow):
         if self.interpret is not None:
             self.interpret.retranslate(L)
 
-    def set_language(self, lang: str):
-        if lang == self.lang:
-            return
-        self.lang = lang
-        self.retranslate_ui()
-        self.status.showMessage(t(lang, "ui_language", code=lang))
+    def show_about(self):
+        QMessageBox.about(
+            self, t(self.lang, "ui_about"),
+            t(self.lang, "ui_about_text", app=APP_NAME, version=__version__))
 
     def open_data_entry(self):
         dlg = DataEntryDialog(self, self.lang, self.values)
@@ -568,9 +566,6 @@ class PileWindow(QMainWindow):
         self.results.clear()
         self._sync_socket_ui()
         self.status.showMessage(t(self.lang, "ui_new_project"))
-
-    def toggle_language(self):
-        self.set_language("tr" if self.lang == "en" else "en")
 
     def export_plot(self):
         if not HAS_MPL or not hasattr(self, "fig"):
