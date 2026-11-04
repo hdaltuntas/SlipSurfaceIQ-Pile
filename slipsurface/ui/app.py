@@ -33,7 +33,7 @@ from slipsurface.pile.forms import (
 )
 from slipsurface.pile.engine import analyse
 from slipsurface.pile.errors import PileError
-from slipsurface.pile.optimizer import optimize_length, Cancelled as OptCancelled
+from slipsurface.pile.optimizer import optimize_cost, optimize_length, Cancelled as OptCancelled
 from slipsurface.pile.plotting import (
     Plotter, SocketPlotter, SOCKET_PLOT_KEYS, available_figures,
 )
@@ -316,7 +316,7 @@ class PileWindow(QMainWindow):
 
     def _sync_pile_type(self):
         """Inputs, commands and figures follow the pile type."""
-        is_bored = self.pile_type == "bored"
+        is_bored = self.pile_type != "socket"
         for value, button in self.type_buttons.items():
             button.blockSignals(True)
             button.setChecked(value == self.pile_type)
@@ -445,6 +445,7 @@ class PileWindow(QMainWindow):
         self.btn_analyse = button(self.run_analysis, secondary=False)
         self.btn_study = button(self.run_study)
         self.btn_opt = button(self.run_optimize_length)
+        self.btn_cost = button(self.run_optimize_cost)
         self.btn_interpret = button(self.open_interpret)
         self.btn_report = button(self.export_report)
         btn_row.addStretch()
@@ -452,8 +453,8 @@ class PileWindow(QMainWindow):
 
         self._build_menu()
         self._build_toolbar()
-        self._bored_only = [self.btn_study, self.btn_opt, self.act_study,
-                            self.act_export_study, self.act_opt]
+        self._bored_only = [self.btn_study, self.btn_opt, self.btn_cost, self.act_study,
+                            self.act_export_study, self.act_opt, self.act_cost]
 
     def _build_toolbar(self):
         tb = self.addToolBar("Main")
@@ -477,6 +478,7 @@ class PileWindow(QMainWindow):
         self.act_study = act("study", "study_run", self.run_study)
         self.act_export_study = act("export_data", "ui_export_study", self.export_study)
         self.act_opt = act("optimize", "ui_optimize_length", self.run_optimize_length)
+        self.act_cost = act("optimize", "ui_optimize_cost", self.run_optimize_cost)
         act_interpret = act("interpret", "ui_interpret", self.open_interpret)
         act_refresh = act("refresh", "ui_refresh", self._update_plot)
         act_export = act("image", "ui_export_plot", self.export_plot)
@@ -504,7 +506,7 @@ class PileWindow(QMainWindow):
             tb.addAction(a)
         tb.addSeparator()
         for a in (act_data, act_analyse, self.act_study, self.act_export_study, self.act_opt,
-                  act_interpret):
+                  self.act_cost, act_interpret):
             tb.addAction(a)
         tb.addSeparator()
         for a in (act_refresh, act_export, act_report):
@@ -552,6 +554,7 @@ class PileWindow(QMainWindow):
         self.btn_analyse.setText(t(L, "run_analysis_button"))
         self.btn_study.setText(t(L, "study_run"))
         self.btn_opt.setText(t(L, "ui_optimize_length"))
+        self.btn_cost.setText(t(L, "ui_optimize_cost"))
         self.btn_interpret.setText(t(L, "ui_interpret"))
         self.btn_report.setText(t(L, "report_action"))
         self.lbl_pile_type.setText(t(L, "ui_pile_type") + "  ")
@@ -603,7 +606,7 @@ class PileWindow(QMainWindow):
             self.headline.setText(summary_mod.socket_headline(socket, L))
             self.cards.set_cards(summary_mod.socket_cards(socket, L))
             self.results.setPlainText(summary_mod.socket_text(socket, L))
-        elif self.pile_type == "bored" and self.last_result is not None:
+        elif self.pile_type != "socket" and self.last_result is not None:
             self.headline.setText(summary_mod.headline(self.last_result, L))
             self.cards.set_cards(summary_mod.cards(self.last_result, L))
             self.results.setPlainText(summary_mod.results_text(self.last_result, L))
@@ -618,7 +621,7 @@ class PileWindow(QMainWindow):
 
     def _fill_plot_combo(self, select: str | None = None):
         current = select or self.plot_combo.currentData()
-        bored = self.pile_type == "bored"
+        bored = self.pile_type != "socket"
         keys = figure_keys(self.pile_type, self.last_result if bored else None,
                            self.last_study if bored else None)
         self.plot_combo.blockSignals(True)
@@ -632,7 +635,7 @@ class PileWindow(QMainWindow):
 
     def _fill_output_combo(self):
         """The outputs a study figure can show; hidden for the other figures."""
-        study = self.last_study if self.pile_type == "bored" else None
+        study = self.last_study if self.pile_type != "socket" else None
         outputs = study_plots.default_outputs(study) if study is not None else []
         current = self.output_combo.currentData()
         names = TRANSLATIONS.get(self.lang, TRANSLATIONS["en"])
@@ -716,7 +719,7 @@ class PileWindow(QMainWindow):
     # ------------------------------------------------------------------ study
     def run_study(self):
         L = self.lang
-        if self.pile_type != "bored":
+        if self.pile_type == "socket":
             return
         spec = study_spec(self.values)
         variables = study_variables(self.values)
@@ -794,7 +797,7 @@ class PileWindow(QMainWindow):
     # ------------------------------------------------------------------ optimize
     def run_optimize_length(self):
         L = self.lang
-        if self.pile_type != "bored":
+        if self.pile_type == "socket":
             return
         dlg = QDialog(self)
         dlg.setWindowTitle(t(L, "ui_opt_title"))
@@ -845,6 +848,95 @@ class PileWindow(QMainWindow):
             self.status.showMessage(t(L, "ui_best_l", L=best_L))
         except Exception as e:
             error_box(self, t(L, "ui_opt_title"), e, L)
+
+    def _cost_dialog(self):
+        """The bounds and cost coefficients for the cost search, or None."""
+        L = self.lang
+        dlg = QDialog(self)
+        dlg.setWindowTitle(t(L, "ui_cost_title"))
+        form = QFormLayout(dlg)
+        form.addRow(QLabel(t(L, "ui_cost_formula")))
+
+        def spin(lo, hi, value, decimals=2, step=0.1):
+            sp = QDoubleSpinBox()
+            sp.setDecimals(decimals)
+            sp.setRange(lo, hi)
+            sp.setSingleStep(step)
+            sp.setValue(value)
+            return sp
+
+        D_now = float(self.values.get("D", 0.8) or 0.8)
+        fields = {
+            "lmin": spin(0.5, 100, 3.0), "lmax": spin(1.0, 200, 40.0),
+            "dmin": spin(0.1, 5.0, min(0.3, D_now)), "dmax": spin(0.2, 6.0, max(1.5, D_now)),
+            "a": spin(0.0, 1e6, 1.0, 3), "b": spin(0.0, 1e6, 0.1, 3),
+        }
+        sp_pop = QSpinBox(); sp_pop.setRange(5, 50); sp_pop.setValue(12)
+        sp_iter = QSpinBox(); sp_iter.setRange(5, 100); sp_iter.setValue(30)
+        for key, label in (("lmin", "ui_lmin"), ("lmax", "ui_lmax"), ("dmin", "ui_dmin"),
+                           ("dmax", "ui_dmax"), ("a", "ui_cost_a"), ("b", "ui_cost_b")):
+            form.addRow(t(L, label), fields[key])
+        form.addRow(t(L, "ui_popsize"), sp_pop)
+        form.addRow(t(L, "ui_maxiter"), sp_iter)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        form.addRow(buttons)
+        if dlg.exec() != QDialog.Accepted:
+            return None
+        v = {k: sp.value() for k, sp in fields.items()}
+        if v["lmin"] >= v["lmax"] or v["dmin"] >= v["dmax"]:
+            QMessageBox.warning(self, t(L, "ui_cost_title"), t(L, "ui_bounds_invalid"))
+            return None
+        return dict(L_bounds=(v["lmin"], v["lmax"]), D_bounds=(v["dmin"], v["dmax"]),
+                    cost_a=v["a"], cost_b=v["b"], popsize=sp_pop.value(),
+                    maxiter=sp_iter.value())
+
+    def run_optimize_cost(self, options: dict | None = None):
+        """Cheapest safe (L, D); options skips the dialog (used by the tests)."""
+        L = self.lang
+        if self.pile_type == "socket":
+            return
+        if options is None:
+            options = self._cost_dialog()
+            if options is None:
+                return
+        try:
+            cfg = to_config(self.values)
+            ok, res = run_task(
+                self, t(L, "ui_cost_title"), t(L, "ui_cost_running"),
+                lambda progress, cancelled: optimize_cost(
+                    cfg, progress=progress, is_cancelled=cancelled, **options),
+                t(L, "ui_cancel"), delay_ms=0)
+            if not ok:
+                if isinstance(res, (Cancelled, OptCancelled)):
+                    self.status.showMessage(t(L, "ui_cancelled"))
+                    return
+                raise res
+            lines = [
+                t(L, "ui_cost_header"),
+                f"Best L: {res['best_L']:.2f} m",
+                f"Best D: {res['best_D']:.2f} m",
+                f"Cost: {res['best_cost']:.4g}",
+                f"Success: {res['success']}",
+                f"Message: {res['message']}",
+                f"Evaluations: {res['nfev']}",
+                "",
+            ]
+            if not res["success"]:
+                self.results.setPlainText("\n".join(lines) + t(L, "ui_cost_failed"))
+                self.status.showMessage(t(L, "ui_cost_failed"))
+                return
+            # Rounded up (L to the cm, D to the mm), so the design stays on the safe side
+            self.values["L"] = math.ceil(res["best_L"] * 100.0 - 1e-6) / 100.0
+            self.values["D"] = math.ceil(res["best_D"] * 1000.0 - 1e-6) / 1000.0
+            self._set_dirty()
+            self.run_analysis()
+            self.results.setPlainText("\n".join(lines) + self.results.toPlainText())
+            self.status.showMessage(t(L, "ui_best_cost", L=res["best_L"], D=res["best_D"],
+                                      cost=res["best_cost"]))
+        except Exception as e:
+            error_box(self, t(L, "ui_cost_title"), e, L)
 
     # ------------------------------------------------------------------ project
     def _ask_pile_type(self) -> str | None:

@@ -50,7 +50,7 @@ def test_each_pile_type_sees_only_its_own_inputs():
     assert not {"D", "L", "Q", "nx", "clay_method", "study_n"} & socket
     # site data applies to both
     assert {"water_depth", "title"} <= bored & socket
-    assert "soil" in forms.PART_TYPES and forms.PART_TYPES["soil"] == ["bored"]
+    assert forms.PART_TYPES["soil"] == ["bored", "driven"]
 
 
 def test_zero_lower_bounds_reach_the_interface():
@@ -87,3 +87,38 @@ def test_reports_are_always_pdf(tmp_path):
     report.export_report(str(tmp_path / "s.html"), None, "en", socket=socket)
     assert (tmp_path / "s.html.pdf").read_bytes()[:5] == b"%PDF-"
     assert not hasattr(report, "export_html")
+
+
+def test_a_driven_pile_has_the_soil_inputs_and_its_installation():
+    driven, bored = _visible_fields("driven"), _visible_fields("bored")
+    assert driven >= {"D", "L", "Q", "nx", "clay_method", "study_n"}
+    fields = {f["key"]: f for g in forms.schema()["pile"]["groups"] for f in g["fields"]}
+    assert fields["installation"]["when"] == [{"key": "pile_type", "in": ["driven"]}]
+    assert {o["value"] for o in fields["installation"]["options"]} == \
+        {"driven_low", "driven_high"}
+
+
+def test_a_driven_pile_is_installed_by_driving():
+    cfg = forms.to_config({**forms.defaults(), "pile_type": "driven"})
+    assert cfg["pile"]["installation"] == "driven_high"
+    cfg = forms.to_config({**forms.defaults(), "pile_type": "driven",
+                           "installation": "driven_low"})
+    assert cfg["pile"]["installation"] == "driven_low"
+    cfg = forms.to_config({**forms.defaults(), "pile_type": "driven", "installation": "bored"})
+    assert cfg["pile"]["installation"] == "driven_high"
+
+
+def test_older_files_installed_by_driving_open_as_driven():
+    assert forms.from_config({"pile": {"installation": "driven_low"}})["pile_type"] == "driven"
+    old = {"pile_type": "soil", "pile": {"installation": "driven_high"}}
+    assert forms.from_config(old)["pile_type"] == "driven"
+    # a file that names its type keeps it
+    assert forms.from_config({"pile_type": "bored",
+                              "pile": {"installation": "bored"}})["pile_type"] == "bored"
+
+
+def test_driven_and_bored_give_different_capacities():
+    from slipsurface.pile.engine import analyse
+    bored = analyse(forms.to_config({**forms.defaults(), "pile_type": "bored"})).results
+    driven = analyse(forms.to_config({**forms.defaults(), "pile_type": "driven"})).results
+    assert driven["Qs"] > bored["Qs"]          # K/K0 1.4 against 1.0 in the sand

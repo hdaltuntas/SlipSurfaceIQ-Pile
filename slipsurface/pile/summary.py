@@ -364,6 +364,8 @@ def socket_text(socket, lang: str = "en") -> str:
                                        ratio=m["ratio"], aE=m["alpha_E"]))
     hb = res["hoek_brown"]
     lines.append(L["sock_hb"].format(GSI=s.GSI, mi=s.mi, mb=hb["mb"], s=hb["s"]))
+    if res.get("Qs_soil", 0.0) > 0:
+        lines.append(L["sock_overburden"].format(Qs=res["Qs_soil"]))
 
     lines += ["", L["sock_side_title"],
               _row(L["head_correlation"], [L["head_fs"], L["head_Ls_req"], L["head_Q_all"]],

@@ -45,3 +45,15 @@ def test_the_optimizer_can_be_cancelled():
     with pytest.raises(Cancelled):
         optimize_length(to_config(defaults()), popsize=5, maxiter=10,
                         is_cancelled=lambda: True)
+
+
+def test_the_cost_optimizer_reports_progress_and_can_be_cancelled():
+    from slipsurface.pile.optimizer import Cancelled, optimize_cost
+    with pytest.raises(Cancelled):
+        optimize_cost(to_config(defaults()), popsize=5, maxiter=10,
+                      is_cancelled=lambda: True)
+    seen = []
+    res = optimize_cost(to_config(defaults()), popsize=5, maxiter=4, polish=False,
+                        progress=lambda done, total: seen.append((done, total)))
+    assert seen and all(total == 4 for _, total in seen)
+    assert res["best_cost"] > 0

@@ -13,7 +13,7 @@ __all__ = ["APP_NAME", "APP_VERSION", "DEFAULT_CONFIG", "THEMES", "PLOT_PALETTE"
            "SOIL_FILL", "METHOD_COLORS", "SHAPES", "INSTALLATIONS", "BEHAVIOURS",
            "CLAY_METHODS", "TIP_METHODS", "EFFICIENCY_METHODS", "GROUP_SETTLEMENT",
            "SKIN_DISTRIBUTIONS", "SOCKET_SIDE_METHODS", "SOCKET_BASE_METHODS",
-           "SOCKET_DESIGN", "SOCKET_BASE_DESIGN", "MODULUS_METHODS", "ACCENT", "PA"]
+           "SOCKET_DESIGN", "SOCKET_BASE_DESIGN", "MODULUS_METHODS", "OVERBURDEN_FRICTION", "ACCENT", "PA"]
 
 #: Atmospheric pressure, the reference stress of the normalised correlations [kPa]
 PA = 101.325
@@ -61,6 +61,9 @@ SOCKET_BASE_DESIGN = ["none", "min", "mean"] + SOCKET_BASE_METHODS
 
 #: The rock mass modulus: from RQD (Gardner), from GSI (Hoek & Diederichs), or entered
 MODULUS_METHODS = ["rqd", "gsi", "direct"]
+
+#: Whether the soil above the rock adds shaft friction to a socketed pile
+OVERBURDEN_FRICTION = ["none", "soil"]
 
 # --- Interface theme and plot palette --------------------------------------
 # --- kept together so the figures always match the page they are shown on. -
@@ -209,6 +212,10 @@ DEFAULT_CONFIG = {
         "top": 1.0,                # depth of the pile head below the ground [m]
         "rock_depth": 12.0,        # depth of the rock surface below the ground [m]
         "Q": 9000.0,               # vertical load on the pile [kN]
+        # Shaft friction in the soil above the rock: "none" leaves it out (it
+        # needs far more movement than the socket to mobilise), "soil" takes
+        # it from the soil profile
+        "overburden_friction": "none",
         "qu": 20.0,                # uniaxial compressive strength of the intact rock [MPa]
         "RQD": 70.0,               # rock quality designation [%]
         "Ei": 20000.0,             # modulus of the intact rock [MPa]

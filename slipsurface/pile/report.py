@@ -105,7 +105,8 @@ TEXTS = {
         "ok": "OK", "notok": "NOT OK", "na": "n/a",
         "socket_D": "Socket diameter D", "socket_Ls": "Socket length checked Ls",
         "socket_top": "Depth of the pile head", "rock": "Depth of the rock surface",
-        "overburden": "Length through the overburden", "socket_Q": "Load Q",
+        "overburden": "Length through the overburden",
+        "Qs_soil": "Shaft friction in the overburden Qs,soil", "not_counted": "not counted", "socket_Q": "Load Q",
         "qu": "Intact rock strength qu", "qu_side": "qu for the side shear (≤ f'c)",
         "RQD": "RQD", "Ei": "Intact modulus Ei", "Em": "Rock mass modulus Em",
         "ratio": "Em / Ei", "alpha_E": "Joint factor αE", "GSI": "GSI", "mi": "mi",
@@ -520,6 +521,8 @@ def _socket_section(T, L, s, figures, img_src, lang, N: _Numbers, page_break: bo
         [T["socket_D"], _f(s.D), "m"], [T["socket_Ls"], _f(res["Ls_check"]), "m"],
         [T["socket_top"], _f(s.top), "m"], [T["rock"], _f(s.rock_depth), "m"],
         [T["overburden"], _f(res["overburden"]), "m"], [T["socket_Q"], _f(s.Q, 0), "kN"],
+        [T["Qs_soil"], _f(res.get("Qs_soil", 0.0), 0) if res.get("Qs_soil", 0.0) > 0
+         else T["not_counted"], "kN" if res.get("Qs_soil", 0.0) > 0 else ""],
         [T["qu"], _f(s.qu, 1), "MPa"], [T["qu_side"], _f(res["qu_side"], 1), "MPa"],
         [T["RQD"], _f(s.RQD, 0), "%"], [T["Ei"], _f(s.Ei, 0), "MPa"],
         [T["Em"], _f(m["Em"], 0), "MPa"], [T["ratio"], _f(m["ratio"], 3), ""],
