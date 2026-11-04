@@ -453,7 +453,7 @@ class SocketAnalysis:
             if not side[self.design]["in_range"]:
                 self.warnings.append(message("warn_socket_design_weak"))
 
-        for key, entry in side.items():
+        for entry in side.values():
             entry["Ls_req"] = self.required_length(entry["fs"])
             entry["Q_all"] = self.capacity(self.Ls, entry["fs"])["Q_all"]
         Ls_req = self.required_length(fs_design)

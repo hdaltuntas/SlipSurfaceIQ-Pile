@@ -92,6 +92,7 @@ def test_reports_are_always_pdf(tmp_path):
 def test_a_driven_pile_has_the_soil_inputs_and_its_installation():
     driven, bored = _visible_fields("driven"), _visible_fields("bored")
     assert driven >= {"D", "L", "Q", "nx", "clay_method", "study_n"}
+    assert driven == bored   # same groups; only the installation field differs
     fields = {f["key"]: f for g in forms.schema()["pile"]["groups"] for f in g["fields"]}
     assert fields["installation"]["when"] == [{"key": "pile_type", "in": ["driven"]}]
     assert {o["value"] for o in fields["installation"]["options"]} == \

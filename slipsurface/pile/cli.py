@@ -70,8 +70,8 @@ def check_environment(verbose: bool = True, need_gui: bool = True) -> bool:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="SlipSurfaceIQ Pile",
-        description="Axial capacity, group action and settlement of bored piles, and "
-                    "rock-socketed piles — desktop interface or command line.")
+        description="Axial capacity, group action and settlement of bored and driven "
+                    "piles, and rock-socketed piles — desktop interface or command line.")
     parser.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     parser.add_argument("--check", action="store_true",
                         help="check the Python version and the dependencies, then exit")
