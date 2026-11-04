@@ -357,7 +357,7 @@ def socket_groups(lang: str = "en") -> List[Group]:
                     base_design_choices(lang)),
             _num("FS_side", _t(lang, "FS_side_label"), s["FS_side"], 1, 10, "", 2, 0.1),
             _num("FS_base", _t(lang, "FS_base_label"), s["FS_base"], 1, 10, "", 2, 0.1),
-            _num("min_ratio", _t(lang, "min_ratio_label"), s["min_ratio"], 0, 10, "", 2, 0.25),
+            _num("min_ratio", _t(lang, "min_ratio_label"), s["min_ratio"], 3, 10, "", 2, 0.25),
             _num("weak_rock", _t(lang, "weak_rock_label"), s["weak_rock"], 0, 100, "MPa", 1,
                  0.5),
         ], note=_t(lang, "socket_design_note"), when=SOCKET),

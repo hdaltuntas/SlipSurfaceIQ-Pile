@@ -50,6 +50,7 @@ import numpy as np
 from .config import (
     DEFAULT_CONFIG,
     MODULUS_METHODS,
+    MIN_SOCKET_RATIO,
     OVERBURDEN_FRICTION,
     SOCKET_BASE_DESIGN,
     SOCKET_BASE_METHODS,
@@ -244,7 +245,9 @@ class SocketAnalysis:
                             else "min")
         self.FS_side = max(num(s, "FS_side", 2.5), 1.0)
         self.FS_base = max(num(s, "FS_base", 3.0), 1.0)
-        self.min_ratio = max(num(s, "min_ratio", 1.0), 0.0)
+        ratio = num(s, "min_ratio", MIN_SOCKET_RATIO)
+        self.min_ratio = max(ratio, MIN_SOCKET_RATIO)
+        self._ratio_raised = ratio < MIN_SOCKET_RATIO - 1e-9
         self.weak_rock = max(num(s, "weak_rock", 5.0), 0.0)
         self.overburden_friction = (s.get("overburden_friction")
                                     if s.get("overburden_friction") in OVERBURDEN_FRICTION
@@ -458,6 +461,8 @@ class SocketAnalysis:
             entry["Q_all"] = self.capacity(self.Ls, entry["fs"])["Q_all"]
         Ls_req = self.required_length(fs_design)
         minimum = self.min_ratio * self.D
+        if self._ratio_raised:
+            self.warnings.append(message("warn_socket_min_ratio", n=MIN_SOCKET_RATIO))
         Ls_design = max(Ls_req, minimum) if math.isfinite(Ls_req) else float("nan")
         lengths = [entry["Ls_req"] for entry in side.values()
                    if entry["in_range"] and math.isfinite(entry["Ls_req"])]
