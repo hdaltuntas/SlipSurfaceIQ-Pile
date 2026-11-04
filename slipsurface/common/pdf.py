@@ -2,8 +2,8 @@
 PDF output for the calculation report.
 
 `report.build_html()` assembles the report once; this module turns that same
-HTML into a PDF with reportlab, so the PDF, the HTML file and the DOCX all say
-exactly the same thing and there is one place where report content is decided.
+HTML into a PDF with reportlab, so there is one place where report content is
+decided.
 
 The walker deliberately understands only the markup `report.build_html()`
 produces — headings, paragraphs, tables, list items and figures. It is not a

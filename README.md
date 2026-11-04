@@ -53,6 +53,6 @@ Results depend on input parameters and methods selected. Always verify with engi
 
 ## Technologies
 
-Python 3.10+; PySide6 (Qt) desktop GUI; NumPy and SciPy for the analysis and optimization; Matplotlib for figures; ReportLab (PDF), python-docx (Word) and openpyxl (XLSX) for report/export files.
+Python 3.10+; PySide6 (Qt) desktop GUI; NumPy and SciPy for the analysis and optimization; Matplotlib for figures; ReportLab for the PDF report and openpyxl (XLSX) for study exports.
 
 License: GNU Affero General Public License v3 (AGPLv3) — see [LICENSE](LICENSE).

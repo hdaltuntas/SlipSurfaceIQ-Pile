@@ -5,12 +5,8 @@ The report is assembled as HTML (the inputs, the base and shaft resistance of
 every method, the pile's weight, the capacity, the group, the settlement, the
 checks and the required length, the figures, the warnings and the method
 notes; the rock socket if one was analysed; the study if one was run) and
-exported as
-  * PDF   — through reportlab (see `slipsurface.common.pdf`)
-  * HTML  — a single self-contained file (figures embedded as base64)
-  * DOCX  — optional, needs `python-docx`
-
-There is one assembly, `build_html()`, so all three formats say the same thing.
+typeset as a PDF through reportlab (see `slipsurface.common.pdf`). The HTML is
+only the intermediate form the PDF is built from; it is not exported.
 """
 
 from __future__ import annotations
@@ -686,12 +682,6 @@ def _all_figures(analysis, lang, study, socket):
     return figures
 
 
-def export_html(path: str, analysis, lang: str, study=None, socket=None) -> None:
-    figures = _all_figures(analysis, lang, study, socket)
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(build_html(analysis, lang, figures, study=study, socket=socket))
-
-
 def export_pdf(path: str, analysis, lang: str, study=None, socket=None) -> None:
     """PDF through reportlab; the figures travel as `fig://<key>` references."""
     from slipsurface.common import pdf as pdf_writer
@@ -708,71 +698,8 @@ def export_pdf(path: str, analysis, lang: str, study=None, socket=None) -> None:
                            footer=f"{info.get('title', '')} — {APP_NAME} v{APP_VERSION}")
 
 
-def export_docx(path: str, analysis, lang: str, study=None, socket=None) -> None:
-    """Word report; requires python-docx."""
-    try:
-        import docx
-        from docx.shared import Inches, Pt, RGBColor
-    except ImportError as exc:
-        raise RuntimeError("python-docx is not installed (pip install python-docx).") from exc
-    import re
-
-    figures = _all_figures(analysis, lang, study, socket)
-    html_text = build_html(analysis, lang, figures, img_src=lambda k: f"fig://{k}",
-                           study=study, socket=socket)
-    d = docx.Document()
-    d.styles["Normal"].font.size = Pt(10)
-    d.styles["Normal"].font.color.rgb = RGBColor(0x14, 0x14, 0x13)
-    # the interface's look: serif headings, the title in ink, sections in terracotta
-    for name, colour in (("Title", (0x14, 0x14, 0x13)), ("Heading 1", (0xC6, 0x61, 0x3F)),
-                         ("Heading 2", (0x14, 0x14, 0x13))):
-        style = d.styles[name]
-        style.font.name = "Georgia"
-        style.font.bold = False
-        style.font.color.rgb = RGBColor(*colour)
-
-    tokens = re.split(r"(<h1>.*?</h1>|<h2[^>]*>.*?</h2>|<h3>.*?</h3>|<table[^>]*>.*?</table>|"
-                      r"<p[^>]*>.*?</p>|<li>.*?</li>)", html_text, flags=re.S)
-
-    def strip(s):
-        return html.unescape(re.sub(r"<[^>]+>", "", re.sub(r"<br\s*/?>", "\n", s))).strip()
-
-    for tok in tokens:
-        if tok.startswith("<h1>"):
-            d.add_heading(strip(tok), level=0)
-        elif tok.startswith("<h2"):
-            d.add_heading(strip(tok), level=1)
-        elif tok.startswith("<h3>"):
-            d.add_heading(strip(tok), level=2)
-        elif tok.startswith("<li>"):
-            d.add_paragraph(strip(tok), style="List Bullet")
-        elif tok.startswith("<table"):
-            rows = re.findall(r"<tr>(.*?)</tr>", tok, flags=re.S)
-            cells = [re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", r, flags=re.S) for r in rows]
-            if cells:
-                table = d.add_table(rows=len(cells), cols=len(cells[0]))
-                table.style = "Light Grid Accent 1"
-                for i, row in enumerate(cells):
-                    for j, c in enumerate(row):
-                        if j < len(table.columns):
-                            table.cell(i, j).text = strip(c)
-        elif tok.startswith("<p"):
-            m = re.search(r"src='fig://([a-z_]+)'", tok)
-            if m:
-                d.add_picture(io.BytesIO(figures[m.group(1)]), width=Inches(6.3))
-            else:
-                text = strip(tok)
-                if text:
-                    d.add_paragraph(text)
-    d.save(path)
-
-
 def export_report(path: str, analysis, lang: str, study=None, socket=None) -> None:
-    ext = path.lower().rsplit(".", 1)[-1]
-    if ext == "pdf":
-        export_pdf(path, analysis, lang, study, socket)
-    elif ext == "docx":
-        export_docx(path, analysis, lang, study, socket)
-    else:
-        export_html(path if ext in ("html", "htm") else path + ".html", analysis, lang, study,
-                    socket)
+    """The calculation report, always as PDF; '.pdf' is added when missing."""
+    if not path.lower().endswith(".pdf"):
+        path = f"{path}.pdf"
+    export_pdf(path, analysis, lang, study, socket)

@@ -414,7 +414,7 @@ ENTRIES = {
                       'Axial pile capacity, group action, settlement and rock-socket analysis.\n\n'
                       'Written in Python.\n'
                       'Technologies: PySide6 (Qt) desktop GUI, NumPy, SciPy, Matplotlib, '
-                      'ReportLab (PDF), python-docx (Word), openpyxl (XLSX).\n'
+                      'ReportLab (PDF), openpyxl (XLSX).\n'
                       'Interface language: English.\n'
                       'License: GNU AGPL v3 — see LICENSE.\n\n'
                       'Results depend on input parameters and methods selected. '
@@ -444,7 +444,7 @@ ENTRIES = {
     'ui_soil_tab': 'Soil Profile',
     'ui_study_vars_tab': 'Study Variables',
     'ui_add_row': '+ Add row',
-    'ui_help_text': '{app} {version}\n\n1. Choose the pile type in the header: Bored pile or Rock-socketed pile\n2. Enter the data for that type via Data Entry (only its inputs are shown)\n3. Analyse (F5) — runs the analysis of the chosen type\n4. View results and plots, or open Interpret\n5. Bored pile: optimize L, run a study\n6. Export a PDF/HTML/Word report\n\nCLI: python main.py analyze|optimize-length ...',
+    'ui_help_text': '{app} {version}\n\n1. Choose the pile type in the header: Bored pile or Rock-socketed pile\n2. Enter the data for that type via Data Entry (only its inputs are shown)\n3. Analyse (F5) — runs the analysis of the chosen type\n4. View results and plots, or open Interpret\n5. Bored pile: optimize L, run a study\n6. Export a PDF report\n\nCLI: python main.py analyze|optimize-length ...',
     'group_study': 'Study options',
     'study_method': 'Sampling',
     'study_n': 'Samples',

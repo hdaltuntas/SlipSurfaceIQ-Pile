@@ -65,6 +65,21 @@ BORED = [("pile_type", ["bored"])]
 SOCKET = [("pile_type", ["socket"])]
 
 
+#: The project title a new project of each type starts with
+DEFAULT_TITLES = {
+    "bored": DEFAULT_CONFIG["project_info"]["title"],
+    "socket": "Project: Rock-socketed pile",
+}
+
+
+def default_title(pile_type: str, current: str = "") -> str:
+    """The title for a pile type: the type's default while the user has kept
+    a default title, otherwise their own title unchanged."""
+    if not current or current in DEFAULT_TITLES.values():
+        return DEFAULT_TITLES[pile_type_of(pile_type)]
+    return current
+
+
 def pile_type_of(value) -> str:
     """A pile type from whatever a form or a file carries; unknown is bored."""
     text = _LEGACY_PILE_TYPES.get(str(value or ""), str(value or ""))
