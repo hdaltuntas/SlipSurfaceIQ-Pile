@@ -138,6 +138,12 @@ class PileWindow(QMainWindow):
         self.status = QStatusBar()
         self.setStatusBar(self.status)
         self.retranslate_ui()
+        self._sync_socket_ui()
+
+    def _sync_socket_ui(self):
+        enabled = self.values.get("pile_type") == "socket"
+        self.btn_socket.setEnabled(enabled)
+        self.act_socket.setEnabled(enabled)
 
     def _build_ui(self):
         central = QWidget()
@@ -239,6 +245,7 @@ class PileWindow(QMainWindow):
         act_data = act("settings", "ui_data_entry", self.open_data_entry)
         act_analyse = act("analyse", "run_analysis_button", self.run_analysis)
         act_socket = act("analyse", "run_socket_button", self.run_socket)
+        self.act_socket = act_socket
         act_study = act("analyse", "study_run", self.run_study)
         act_export_study = act("export", "ui_export_study", self.export_study)
         act_opt = act("optimize", "ui_optimize_length", self.run_optimize_length)
@@ -344,6 +351,7 @@ class PileWindow(QMainWindow):
         dlg = DataEntryDialog(self, self.lang, self.values)
         if dlg.exec() == QDialog.Accepted:
             self.values = dlg.collect()
+            self._sync_socket_ui()
             self.status.showMessage(t(self.lang, "ui_data_updated"))
 
     def run_analysis(self):
@@ -407,6 +415,8 @@ class PileWindow(QMainWindow):
 
     def run_socket(self):
         L = self.lang
+        if self.values.get("pile_type") != "socket":
+            return
         try:
             socket = analyse_socket(to_config(self.values))
             self.last_socket = socket
@@ -556,6 +566,7 @@ class PileWindow(QMainWindow):
         self.last_study = None
         self.last_socket = None
         self.results.clear()
+        self._sync_socket_ui()
         self.status.showMessage(t(self.lang, "ui_new_project"))
 
     def toggle_language(self):
@@ -612,6 +623,7 @@ class PileWindow(QMainWindow):
             self.last_result = None
             self.last_study = None
             self.last_socket = None
+            self._sync_socket_ui()
             self.status.showMessage(t(self.lang, "ui_opened", path=path))
         except Exception as e:
             QMessageBox.critical(self, "Open error", str(e))

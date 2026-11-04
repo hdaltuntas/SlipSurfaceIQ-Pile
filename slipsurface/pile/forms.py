@@ -154,6 +154,9 @@ def pile_groups(lang: str = "en") -> List[Group]:
     w = DEFAULT_CONFIG["groundwater"]
     return [
         Group(_t(lang, "group_pile"), [
+            _select("pile_type", _t(lang, "pile_type_label"), "soil",
+                    [("soil", _t(lang, "pile_type_soil")),
+                     ("socket", _t(lang, "pile_type_socket"))]),
             _select("shape", _t(lang, "shape_label"), p["shape"],
                     _choices(lang, "shape", SHAPES)),
             _num("D", _t(lang, "D_label"), p["D"], 0.1, 5, "m", 2, 0.05),
