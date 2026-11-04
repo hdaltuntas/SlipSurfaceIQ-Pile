@@ -6,6 +6,7 @@ Standalone desktop program extracted from SlipSurfaceIQ-Suite, with a light PySi
 
 ## Features
 
+- **Pile type chosen first** — *Bored pile* or *Rock-socketed pile*, in the window header and at the top of Data Entry; it sets which inputs are shown, which analysis **Analyse** runs, and which results, figures and report sections come back (saved in the project file as `pile_type`)
 - Layered soil profile with stresses, shaft friction (α, β, λ methods, SPT), base resistance (Meyerhof, Vesić, Janbu)
 - Group efficiency and block failure
 - Single-pile and group settlement
@@ -15,8 +16,10 @@ Standalone desktop program extracted from SlipSurfaceIQ-Suite, with a light PySi
 - **Interactive plots** (section, profile, methods, length curve, group, settlement, seismic)
 - LE-style desktop GUI (Fusion, light palette, menus, toolbar, docks)
 - Separate **Interpret** window for results and plots
-- Interactive plots (section, profile, methods, length, group, settlement, seismic)
-- Project save/load (.pile.json)
+- Project save/load (.pile.json) with Save As, Open Recent and an unsaved-changes prompt
+- Data Entry with a live, to-scale preview of the section, unit-aware fields that show only the inputs the chosen methods use, and soil-table checks that mark invalid cells in red
+- Headline result cards (capacity, checks, length / socket length, settlement)
+- Analysis, studies and optimization run in the background with progress and Cancel
 
 ## Installation and start-up
 

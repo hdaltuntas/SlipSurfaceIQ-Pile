@@ -247,3 +247,24 @@ def test_the_earthquake_off_leaves_no_trace():
     res = analyse(seismic_case(enabled=False)).results
     assert res["seismic"] is None
     assert not any(key.startswith("seismic") for key in res["checks"])
+
+
+def test_the_raft_load_spreads_two_to_one_on_each_side():
+    # Tomlinson's 2 : 1 — at depth z below the raft the load acts on (Bg + z)(Lg + z)
+    from slipsurface.pile.settlement import raft_widening
+    assert raft_widening(4.0, 2.0) == pytest.approx(4.0)
+    st = analyse(DEFAULT_CONFIG).results["settlement"]
+    raft = st["raft"]
+    row = raft["rows"][-1]
+    z = row["z"] - raft["z_raft"]
+    q = DEFAULT_CONFIG["loading"]["Q"]
+    assert row["dsigma"] == pytest.approx(q / ((st["Bg"] + z) * (st["Lg"] + z)))
+
+
+def test_a_tip_on_a_layer_boundary_is_flagged():
+    # the default tip is 1.5 m (< 2·D) into the dense sand
+    res = analyse(DEFAULT_CONFIG).results
+    assert any(w[0] == "warn_tip_embedment" for w in res["warnings"])
+    deeper = {**DEFAULT_CONFIG, "pile": {**DEFAULT_CONFIG["pile"], "L": 24.0}}
+    assert not any(w[0] == "warn_tip_embedment"
+                   for w in analyse(deeper).results["warnings"])

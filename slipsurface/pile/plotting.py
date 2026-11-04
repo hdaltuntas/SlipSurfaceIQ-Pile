@@ -43,6 +43,7 @@ from .config import (
 )
 from .i18n import TRANSLATIONS
 from .plot_style import TITLE_FONT, label_box, style_axis, style_figure
+from .settlement import raft_widening
 
 #: The figures, in the order the interface offers them
 PLOT_KEYS = ["section", "profile", "methods", "length", "group", "settlement", "seismic"]
@@ -54,6 +55,32 @@ def _legend(ax, th, fontsize=8.5, **kwargs):
     for text in legend.get_texts():
         text.set_color(th["fg"])
     return legend
+
+
+def _ground(ax, th, x0, x1):
+    """The ground surface: a line at z = 0 with short hatch ticks above it."""
+    ax.plot([x0, x1], [0, 0], color=th["fg"], linewidth=1.4, zorder=6)
+    step = (x1 - x0) / 40.0
+    for x in np.arange(x0 + step / 2, x1, step):
+        ax.plot([x, x - step * 0.6], [0, -step * 0.6], color=th["fg_dim"], linewidth=0.7,
+                zorder=6)
+
+
+def _water_mark(ax, th, x, zw, text):
+    """The water table: dashed line plus the usual ▽ symbol and its label."""
+    ax.axhline(zw, color=PLOT_PALETTE["water"], linewidth=1.4, linestyle="--", zorder=4)
+    ax.plot([x], [zw], marker="v", markersize=8, color=PLOT_PALETTE["water"], zorder=7,
+            linestyle="none")
+    ax.annotate(text, xy=(x, zw), xytext=(8, 4), textcoords="offset points", fontsize=8,
+                ha="left", va="bottom", color=PLOT_PALETTE["water"], zorder=7,
+                bbox=label_box(th, 0.85))
+
+
+def _boundaries(ax, th, profile, z_max):
+    """Faint layer boundaries across a depth plot."""
+    for layer in profile.layers[1:]:
+        if layer["top"] < z_max:
+            ax.axhline(layer["top"], color=th["border"], linewidth=0.9, zorder=0.5)
 
 
 def _empty(fig, th, text):
@@ -116,16 +143,18 @@ class Plotter(_Base):
             ax.add_patch(Rectangle((-half, y0), 2 * half, y1 - y0,
                                    facecolor=fills[layer["behaviour"]], edgecolor=th["border"],
                                    linewidth=0.8, zorder=1))
+            # the name in the layer's own band, clear of the cap
             ax.text(-half * 0.97, 0.5 * (y0 + y1), layer["name"], fontsize=8.5, va="center",
                     color=th["fg"], zorder=6, bbox=label_box(th, 0.8))
+            if layer["top"] > 0:
+                ax.text(half * 0.985, y0, f"{y0:.2f} m", fontsize=7.5, ha="right",
+                        va="bottom", color=th["fg_dim"], zorder=6)
+        _ground(ax, th, -half, half)
         if a.profile.zw < bottom:
-            ax.axhline(a.profile.zw, color=PLOT_PALETTE["water"], linewidth=1.4,
-                       linestyle="--", zorder=4)
-            ax.text(half * 0.97, a.profile.zw, self.L["plot_water"], fontsize=8, ha="right",
-                    va="bottom", color=PLOT_PALETTE["water"], zorder=6)
+            _water_mark(ax, th, half * 0.55, a.profile.zw, self.L["plot_water"])
 
         # the cap and the piles of the row along B
-        cap_t = min(max(0.9 * D, 0.6), max(top, 0.6))
+        cap_t = min(max(0.9 * D, 0.6), top) if top > 0 else min(max(0.9 * D, 0.6), 1.0)
         left, right = min(xs) - D, max(xs) + D
         ax.add_patch(Rectangle((left, top - cap_t), right - left, cap_t,
                                facecolor=PLOT_PALETTE["cap"], edgecolor=th["border"],
@@ -138,21 +167,23 @@ class Plotter(_Base):
         zc = res["zc"]
         if math.isfinite(zc) and zc < bottom:
             ax.axhline(zc, color=PLOT_PALETTE["limit"], linestyle=":", linewidth=1.2, zorder=4)
-            ax.text(half * 0.97, zc, f"zc = {zc:.1f} m", fontsize=8, ha="right", va="bottom",
-                    color=th["fg"], zorder=6)
+            ax.text(half * 0.55, zc, f"zc = {zc:.1f} m", fontsize=8, ha="left", va="bottom",
+                    color=th["fg"], zorder=6, bbox=label_box(th, 0.8))
         raft = res["settlement"]["raft"]["z_raft"]
         if a.n > 1:
             Bg = res["settlement"]["Bg"]
             ax.plot([-Bg / 2, Bg / 2], [raft, raft], color=PLOT_PALETTE["consolidation"],
                     linewidth=2.2, zorder=6)
             depth = bottom - raft
-            widen = depth / a.spread / 2.0
+            widen = raft_widening(depth, a.spread) / 2.0   # one side
             for sign in (-1, 1):
                 ax.plot([sign * Bg / 2, sign * (Bg / 2 + widen)], [raft, bottom],
                         color=PLOT_PALETTE["consolidation"], linewidth=1.0, linestyle="--",
                         zorder=6)
-            ax.text(Bg / 2 + 0.1, raft, self.L["plot_raft"], fontsize=8, va="bottom",
-                    color=th["fg"], zorder=7, bbox=label_box(th, 0.8))
+            ax.annotate(self.L["plot_raft"], xy=(Bg / 2, raft), xytext=(14, -14),
+                        textcoords="offset points", fontsize=8, va="top", color=th["fg"],
+                        zorder=7, bbox=label_box(th, 0.85),
+                        arrowprops=dict(arrowstyle="-", color=th["fg_dim"], lw=0.8))
 
         # the load, the dimensions
         arrow_top = top - cap_t - max(0.18 * tip, 1.0)
@@ -161,13 +192,17 @@ class Plotter(_Base):
                     zorder=7)
         ax.text(0, arrow_top, f"Q = {a.Q:,.0f} kN", fontsize=8.5, ha="center", va="bottom",
                 color=th["fg"], bbox=label_box(th), zorder=8)
-        x_dim = max(xs) + D * 0.9
+        # the length on the left of the group, the raft label sits on the right
+        x_dim = min(xs) - D * 1.1
         ax.annotate("", xy=(x_dim, top), xytext=(x_dim, tip),
-                    arrowprops=dict(arrowstyle="<->", color=th["fg_dim"], lw=1.0), zorder=7)
-        ax.text(x_dim + 0.1, 0.5 * (top + tip), f"L = {a.L:.2f} m", fontsize=8.5, va="center",
-                color=th["fg"], bbox=label_box(th), zorder=8)
-        ax.text(max(xs) + D * 0.6, tip, f"{self.L['plot_tip']} {tip:.2f} m", fontsize=8,
-                va="top", color=th["fg"], zorder=8)
+                    arrowprops=dict(arrowstyle="<->", color=th["fg"], lw=1.0), zorder=7)
+        ax.text(x_dim - 0.15, 0.5 * (top + tip), f"L = {a.L:.2f} m", fontsize=8.5,
+                va="center", ha="right", rotation=90, color=th["fg"], bbox=label_box(th),
+                zorder=8)
+        ax.plot([min(xs) - D / 2, max(xs) + D / 2], [tip, tip], color=th["fg"],
+                linewidth=0.8, linestyle=":", zorder=6)
+        ax.text(max(xs) + D * 0.7, tip, f"{self.L['plot_tip']} {tip:.2f} m", fontsize=8,
+                va="top", color=th["fg"], zorder=8, bbox=label_box(th, 0.8))
 
         ax.set_xlim(-half, half)
         ax.set_ylim(bottom, arrow_top - 0.8)
@@ -198,7 +233,6 @@ class Plotter(_Base):
                      label=self.L["plot_sv_sand"])
         ax1.set_xlabel(f"{self.L['plot_stress']} (kPa)", fontsize=9)
         ax1.set_ylabel(f"{self.L['plot_depth']} (m)", fontsize=9)
-        _legend(ax1, th, loc="lower left")
 
         ax2 = fig.add_subplot(1, 3, 2, sharey=ax1)
         style_axis(ax2, th)
@@ -214,25 +248,35 @@ class Plotter(_Base):
             ax2.plot(spt, z, color=METHOD_COLORS["spt"], linewidth=1.0, linestyle="--",
                      label=self._method("spt"))
         ax2.set_xlabel("fs (kPa)", fontsize=9)
-        _legend(ax2, th, loc="best", fontsize=7.5)
+        # below the panel: inside it the six methods hide their own curves
+        _legend(ax2, th, loc="upper center", fontsize=7, ncol=2,
+                bbox_to_anchor=(0.5, -0.13))
 
         ax3 = fig.add_subplot(1, 3, 3, sharey=ax1)
         style_axis(ax3, th)
         load = np.cumsum([row[a.clay_method] * res["perimeter"] * row["h"] for row in slices])
-        ax3.plot(load, z, color=PLOT_PALETTE["shaft"], linewidth=2.0, label="Qs(z)")
+        # the ultimate shaft resistance mobilised from the head down to z
+        ax3.plot(load, z, color=PLOT_PALETTE["shaft"], linewidth=2.0,
+                 label=self.L["plot_qs_cumulative"])
+        ax3.axvline(res["Q_pile"], color=PLOT_PALETTE["applied"], linestyle="--",
+                    linewidth=1.3, label=f"{self.L['plot_pile_load']} = {res['Q_pile']:,.0f} kN")
         ax3.scatter([res["Qs"] + res["Qb"]], [tip], s=40, color=PLOT_PALETTE["ultimate"],
                     zorder=5, label=f"Qs + Qb = {res['Q_ult']:,.0f} kN")
         ax3.plot([res["Qs"], res["Qs"] + res["Qb"]], [tip, tip], color=PLOT_PALETTE["base"],
                  linewidth=3.0, label=f"Qb = {res['Qb']:,.0f} kN")
-        ax3.set_xlabel(f"{self.L['plot_load']} (kN)", fontsize=9)
-        _legend(ax3, th, loc="upper right")
+        ax3.set_xlabel(f"{self.L['plot_resistance']} (kN)", fontsize=9)
+        _legend(ax3, th, loc="upper center", fontsize=7, bbox_to_anchor=(0.5, -0.13))
+        _legend(ax1, th, loc="upper center", fontsize=7, bbox_to_anchor=(0.5, -0.13))
 
         for ax in (ax1, ax2, ax3):
+            _boundaries(ax, th, a.profile, tip)
             ax.axhline(a.top, color=th["fg_dim"], linewidth=0.8, linestyle=":")
             ax.axhline(a.profile.zw, color=PLOT_PALETTE["water"], linewidth=0.8,
                        linestyle="--")
             ax.set_xlim(left=0)
         ax1.set_ylim(tip * 1.02, 0)
+        for ax in (ax2, ax3):
+            ax.tick_params(labelleft=False)
         self._title(fig, th, "profile")
         fig.tight_layout(rect=(0, 0, 1, 0.95))
 
@@ -297,6 +341,14 @@ class Plotter(_Base):
         ax.axhline(res["Q_pile"], color=PLOT_PALETTE["applied"], linestyle="--", linewidth=1.6,
                    label=f"{self.L['plot_pile_load']} = {res['Q_pile']:,.0f} kN")
         ax.axvline(a.L, color=th["fg_dim"], linestyle=":", linewidth=1.2)
+        # where the tip passes from one layer into the next: the curve jumps there
+        y_top = max(max(p["Q_ult_net"] for p in curve), res["Q_pile"]) * 1.12
+        for layer in a.profile.layers[1:]:
+            Lb = layer["top"] - a.top
+            if L[0] < Lb < L[-1]:
+                ax.axvline(Lb, color=th["border"], linewidth=1.0, zorder=0.5)
+                ax.text(Lb, y_top, f" {layer['name']}", rotation=90, fontsize=7.5,
+                        va="top", ha="left", color=th["fg_dim"])
         required = res["required_length"]
         if math.isfinite(required):
             ax.axvline(required, color=PLOT_PALETTE["design"], linewidth=1.4)
@@ -307,8 +359,8 @@ class Plotter(_Base):
                         arrowprops=dict(arrowstyle="-", color=th["fg_dim"], lw=0.8))
         ax.set_xlabel(f"{self.L['plot_length']} (m)", fontsize=9)
         ax.set_ylabel(f"{self.L['plot_load']} (kN)", fontsize=9)
-        ax.set_ylim(bottom=0)
-        _legend(ax, th, loc="upper left")
+        ax.set_ylim(0, y_top * 1.02)
+        _legend(ax, th, loc="lower right")
         self._title(fig, th, "length")
         fig.tight_layout(rect=(0, 0, 1, 0.95))
 
@@ -356,8 +408,10 @@ class Plotter(_Base):
             ax2.barh(y[index], min(value, 1.5), height=0.62,
                      color=METHOD_COLORS.get(key, th["accent"]),
                      alpha=1.0 if primary else 0.55)
-            ax2.text(min(value, 1.5), y[index], f" {value:.3f}", va="center", fontsize=8,
-                     color=th["fg"])
+            off = value > 1.5
+            ax2.text(min(value, 1.5), y[index], f" {value:.3f}" + (" »" if off else ""),
+                     va="center", fontsize=8, color=th["fg"],
+                     fontweight="bold" if off else "normal")
         ax2.axvline(1.0, color=th["fg_dim"], linestyle=":", linewidth=1.0)
         ax2.set_yticks(y)
         ax2.set_yticklabels([self.L[f"eff_{key}"] for key, _ in items], fontsize=8.5,
@@ -413,11 +467,18 @@ class Plotter(_Base):
         ax2.axhline(a.s_allow, color=PLOT_PALETTE["limit"], linestyle="--", linewidth=1.4,
                     label=f"{self.L['plot_allowable']} = {a.s_allow:.0f} mm")
         ax2.set_xticks(x)
-        ax2.set_xticklabels([self.L[f"plot_s_{key}"] for key, _, _ in items], fontsize=8.5,
-                            color=th["fg"], rotation=10)
+        ax2.set_xticklabels([self.L[f"plot_s_{key}"] for key, _, _ in items], fontsize=8,
+                            color=th["fg"], rotation=25, ha="right")
         ax2.set_ylabel(f"{self.L['plot_settlement']} (mm)", fontsize=9)
         ax2.set_ylim(0, max([1000 * v for _, v, _ in items] + [a.s_allow]) * 1.2)
-        _legend(ax2, th, loc="upper left")
+        handles = [Line2D([0], [0], color=PLOT_PALETTE["limit"], linestyle="--",
+                          linewidth=1.4,
+                          label=f"{self.L['plot_allowable']} = {a.s_allow:.0f} mm")]
+        if raft["total"] > 0 and raft["consolidation"] > 0:
+            handles.append(Rectangle((0, 0), 1, 1, facecolor=METHOD_COLORS["raft"],
+                                     hatch="//", edgecolor=th["panel"],
+                                     label=self.L["plot_consolidation_part"]))
+        _legend(ax2, th, handles=handles, loc="upper left")
         self._title(fig, th, "settlement")
         fig.tight_layout(rect=(0, 0, 1, 0.94))
 
@@ -449,6 +510,20 @@ class Plotter(_Base):
             ax.text(p["x"], p["y"] - a.D * 0.75, f"{p['P']:,.0f}", ha="center", va="top",
                     fontsize=8, color=th["fg"])
         lim = max(Bx, By) / 2 + 2.2 * pad
+        # the moments as double-headed vectors (right-hand rule) beside the cap
+        arrow = dict(arrowstyle="-|>", color=PLOT_PALETTE["applied"], lw=1.6)
+        if a.M_B:
+            y_m = By / 2 + pad + 0.45 * pad
+            sign = 1 if a.M_B > 0 else -1
+            ax.annotate("", xy=(sign * Bx / 3, y_m), xytext=(-sign * Bx / 3, y_m),
+                        arrowprops=arrow)
+            ax.text(0, y_m, "M_B", ha="center", va="bottom", fontsize=8, color=th["fg"])
+        if a.M_L:
+            x_m = Bx / 2 + pad + 0.45 * pad
+            sign = 1 if a.M_L > 0 else -1
+            ax.annotate("", xy=(x_m, sign * By / 3), xytext=(x_m, -sign * By / 3),
+                        arrowprops=arrow)
+            ax.text(x_m, 0, " M_L", ha="left", va="center", fontsize=8, color=th["fg"])
         ax.set_xlim(-lim, lim)
         ax.set_ylim(-lim, lim)
         ax.set_aspect("equal", adjustable="box")
@@ -474,7 +549,7 @@ class Plotter(_Base):
                     linewidth=1.5, label=f"Tall = {tens['T_all']:,.0f} kN ({self.L['plot_tension']})")
         ax2.axhline(0, color=th["border"], linewidth=1.0)
         ax2.set_xticks([])
-        ax2.set_xlabel(self.L["plot_piles_sorted"], fontsize=9)
+        ax2.set_xlabel(self.L["plot_piles_sorted_short"], fontsize=9)
         ax2.set_ylabel(f"{self.L['plot_pile_force']} (kN)", fontsize=9)
         span = max(comp["Q_all"], tens["T_all"], top) * 1.3
         ax2.set_ylim(-span, span)
@@ -512,24 +587,27 @@ class SocketPlotter(_Base):
         s, res = self.a, self.res
         D, Ls = s.D, res["Ls_check"]
         tip = s.rock_depth + Ls
-        bottom = tip + max(2.0 * D, 0.25 * tip, 1.0)
+        Ls_design = res.get("Ls_design", float("nan"))
+        deepest = s.rock_depth + max(Ls, Ls_design if math.isfinite(Ls_design) else 0.0)
+        bottom = max(tip, deepest) + max(2.0 * D, 0.25 * tip, 1.0)
         half = max(0.45 * bottom, 3.0 * D)
         fills = self._fills()
         ax.add_patch(Rectangle((-half, 0), 2 * half, s.rock_depth, facecolor=fills["granular"],
                                edgecolor=th["border"], zorder=1))
-        ax.add_patch(Rectangle((-half, s.rock_depth), 2 * half, bottom - s.rock_depth,
-                               facecolor=fills["rock"], edgecolor=th["border"], hatch="//",
-                               zorder=1))
+        rock = Rectangle((-half, s.rock_depth), 2 * half, bottom - s.rock_depth,
+                         facecolor=fills["rock"], edgecolor=th["fg_dim"], hatch="/",
+                         linewidth=0, zorder=1, alpha=0.9)
+        ax.add_patch(rock)
+        ax.plot([-half, half], [s.rock_depth, s.rock_depth], color=th["fg"], linewidth=1.2,
+                zorder=2)
+        _ground(ax, th, -half, half)
         ax.text(-half * 0.97, s.rock_depth / 2, self.L["plot_overburden"], fontsize=8.5,
                 va="center", color=th["fg"], bbox=label_box(th, 0.8), zorder=6)
         ax.text(-half * 0.97, 0.5 * (s.rock_depth + bottom),
                 f"{self.L['plot_rock']}: qu = {s.qu:.1f} MPa", fontsize=8.5, va="center",
                 color=th["fg"], bbox=label_box(th, 0.8), zorder=6)
         if s.zw < bottom:
-            ax.axhline(s.zw, color=PLOT_PALETTE["water"], linewidth=1.4, linestyle="--",
-                       zorder=4)
-            ax.text(half * 0.97, s.zw, self.L["plot_water"], fontsize=8, ha="right",
-                    va="bottom", color=PLOT_PALETTE["water"], zorder=6)
+            _water_mark(ax, th, half * 0.45, s.zw, self.L["plot_water"])
         ax.add_patch(Rectangle((-D / 2, s.top), D, s.rock_depth - s.top,
                                facecolor=PLOT_PALETTE["pile"], edgecolor=th["border"],
                                zorder=5))
@@ -541,13 +619,43 @@ class SocketPlotter(_Base):
                     zorder=7)
         ax.text(0, arrow_top, f"Q = {s.Q:,.0f} kN", fontsize=8.5, ha="center", va="bottom",
                 color=th["fg"], bbox=label_box(th), zorder=8)
-        x_dim = D * 1.2
+        # side shear (up along the socket) and base resistance (up under the base)
+        check = res.get("check") or {}
+        n_arrows = max(int(Ls / max(D * 0.8, 0.4)), 2) if Ls > 0 else 0
+        for zi in np.linspace(s.rock_depth + 0.15 * Ls, tip - 0.15 * Ls, n_arrows):
+            for side in (-1, 1):
+                ax.annotate("", xy=(side * D * 0.62, zi - 0.35 * D),
+                            xytext=(side * D * 0.62, zi + 0.15 * D),
+                            arrowprops=dict(arrowstyle="-|>", color=PLOT_PALETTE["shaft"],
+                                            lw=1.1), zorder=7)
+        if Ls > 0:
+            ax.annotate("", xy=(0, tip + 0.05), xytext=(0, tip + max(0.9 * D, 0.6)),
+                        arrowprops=dict(arrowstyle="-|>", color=PLOT_PALETTE["base"],
+                                        lw=2.0), zorder=7)
+            if check:
+                ax.text(-D * 0.8, s.rock_depth + Ls / 2, f"Qs = {check['Qs']:,.0f} kN",
+                        ha="right", va="center", fontsize=8, color=th["fg"],
+                        bbox=label_box(th), zorder=8)
+                ax.text(0, tip + max(0.9 * D, 0.6), f"Qb = {check['Qb']:,.0f} kN",
+                        ha="center", va="top", fontsize=8, color=th["fg"],
+                        bbox=label_box(th), zorder=8)
+        x_dim = D * 1.3
         ax.annotate("", xy=(x_dim, s.rock_depth), xytext=(x_dim, tip),
-                    arrowprops=dict(arrowstyle="<->", color=th["fg_dim"], lw=1.0), zorder=7)
-        ax.text(x_dim + 0.1, s.rock_depth + Ls / 2, f"Ls = {Ls:.2f} m", fontsize=8.5,
+                    arrowprops=dict(arrowstyle="<->", color=th["fg"], lw=1.0), zorder=7)
+        ax.text(x_dim + 0.15, s.rock_depth + Ls / 2,
+                f"{self.L['plot_ls_checked']} = {Ls:.2f} m", fontsize=8.5,
                 va="center", color=th["fg"], bbox=label_box(th), zorder=8)
-        ax.text(x_dim + 0.1, s.rock_depth, f"{s.rock_depth:.2f} m", fontsize=8, va="bottom",
-                color=th["fg"], zorder=8)
+        Ls_design = res.get("Ls_design", float("nan"))
+        if math.isfinite(Ls_design) and Ls_design > 0:
+            z_d = s.rock_depth + Ls_design
+            ax.plot([-D * 0.9, x_dim + 0.1], [z_d, z_d], color=PLOT_PALETTE["design"],
+                    linewidth=1.6, linestyle="--", zorder=8)
+            ax.text(x_dim + 0.15, z_d, f"{self.L['plot_ls_design']} = {Ls_design:.2f} m",
+                    fontsize=8, va="top" if Ls_design >= Ls else "bottom",
+                    color=PLOT_PALETTE["design"], zorder=8)
+        ax.text(half * 0.97, s.rock_depth,
+                f"{self.L['plot_rock_surface']} {s.rock_depth:.2f} m", fontsize=8,
+                ha="right", va="bottom", color=th["fg"], zorder=8, bbox=label_box(th, 0.8))
         ax.set_xlim(-half, half)
         ax.set_ylim(bottom, arrow_top - 0.8)
         ax.set_xlabel("x (m)", fontsize=9)
@@ -555,7 +663,15 @@ class SocketPlotter(_Base):
         self._title(fig, th, "socket_section", f" — D = {D:.2f} m")
         fig.tight_layout(rect=(0, 0, 1, 0.95))
 
-    def _hbar(self, ax, th, values, design_key):
+    def _scale(self, values, extra=()):
+        """The axis length: the correlations within their range set it, so a
+        weak-rock rule far outside its range does not squash the others."""
+        side = self.res["side"]
+        inside = [v for k, v in values.items() if math.isfinite(v) and side[k]["in_range"]]
+        pool = inside or [v for v in values.values() if math.isfinite(v)]
+        return max(pool + [v for v in extra if math.isfinite(v)] + [1e-9]) * 1.25
+
+    def _hbar(self, ax, th, values, design_key, x_max=None):
         side = self.res["side"]
         y = np.arange(len(SOCKET_SIDE_METHODS))
         for index, key in enumerate(SOCKET_SIDE_METHODS):
@@ -563,12 +679,17 @@ class SocketPlotter(_Base):
             if not math.isfinite(value):
                 continue
             in_range = side[key]["in_range"]
-            ax.barh(y[index], value, height=0.62,
+            shown = min(value, x_max) if x_max else value
+            ax.barh(y[index], shown, height=0.62,
                     color=PLOT_PALETTE["ultimate"] if key == design_key else PLOT_PALETTE["shaft"],
                     alpha=1.0 if in_range else 0.3, hatch=None if in_range else "//",
                     edgecolor=th["panel"])
-            ax.text(value, y[index], f" {value:,.2f}" if value < 100 else f" {value:,.0f}",
-                    va="center", fontsize=8, color=th["fg"])
+            text = f" {value:,.2f}" if value < 100 else f" {value:,.0f}"
+            if x_max and value > x_max:
+                ax.text(shown, y[index], text + " »", va="center", ha="right", fontsize=8,
+                        color=th["fg"], fontweight="bold")
+            else:
+                ax.text(shown, y[index], text, va="center", fontsize=8, color=th["fg"])
         ax.set_yticks(y)
         ax.set_yticklabels([self._side_label(key) for key in SOCKET_SIDE_METHODS],
                            fontsize=8.5, color=th["fg"])
@@ -580,11 +701,12 @@ class SocketPlotter(_Base):
         ax = fig.add_subplot(111)
         style_axis(ax, th, axis="x")
         values = {key: res["side"][key]["fs"] for key in SOCKET_SIDE_METHODS}
-        self._hbar(ax, th, values, res["design"])
+        x_max = self._scale(values, [res["fs_design"]])
+        self._hbar(ax, th, values, res["design"], x_max)
         ax.axvline(res["fs_design"], color=PLOT_PALETTE["design"], linewidth=1.6,
                    label=f"{self.L['plot_design']} = {res['fs_design']:,.0f} kPa")
         ax.set_xlabel("fs (kPa)", fontsize=9)
-        ax.set_xlim(0, max(values.values()) * 1.18)
+        ax.set_xlim(0, x_max)
         handles = [Line2D([0], [0], color=PLOT_PALETTE["design"], linewidth=1.6,
                           label=f"{self.L['plot_design']} = {res['fs_design']:,.0f} kPa"),
                    Rectangle((0, 0), 1, 1, facecolor=PLOT_PALETTE["shaft"], alpha=0.3,
@@ -600,7 +722,8 @@ class SocketPlotter(_Base):
         ax = fig.add_subplot(111)
         style_axis(ax, th, axis="x")
         values = {key: res["side"][key]["Ls_req"] for key in SOCKET_SIDE_METHODS}
-        self._hbar(ax, th, values, res["design"])
+        x_max = self._scale(values, [res["Ls"], res["Ls_design"], 1.0])
+        self._hbar(ax, th, values, res["design"], x_max)
         handles = []
         if math.isfinite(res["Ls_design"]):
             ax.axvline(res["Ls_design"], color=PLOT_PALETTE["design"], linewidth=1.6)
@@ -612,8 +735,7 @@ class SocketPlotter(_Base):
             handles.append(Line2D([0], [0], color=PLOT_PALETTE["applied"], linestyle="--",
                                   linewidth=1.4,
                                   label=self.L["plot_checked_length"].format(Ls=res["Ls"])))
-        finite = [v for v in values.values() if math.isfinite(v)] + [res["Ls"], 1.0]
-        ax.set_xlim(0, max(finite) * 1.2)
+        ax.set_xlim(0, x_max)
         ax.set_xlabel("Ls (m)", fontsize=9)
         if handles:
             _legend(ax, th, handles=handles, loc="lower right")

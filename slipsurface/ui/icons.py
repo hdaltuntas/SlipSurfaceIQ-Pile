@@ -140,6 +140,50 @@ def _pixmap(name: str, size: int = 32) -> QPixmap:
         p.drawLine(QPointF(32, 14), QPointF(32, 36))
         p.drawLine(QPointF(24, 28), QPointF(32, 36))
         p.drawLine(QPointF(40, 28), QPointF(32, 36))
+    elif name == "study":
+        # a histogram: the spread of a parametric / reliability study
+        p.setPen(Qt.NoPen)
+        p.setBrush(BLUE)
+        for x, h in ((12, 12), (22, 26), (32, 36), (42, 20), (52, 8)):
+            p.drawRoundedRect(QRectF(x - 4, 52 - h, 8, h), 1.5, 1.5)
+        p.setPen(_pen(INK, 3))
+        p.drawLine(QPointF(6, 54), QPointF(58, 54))
+    elif name == "export_data":
+        # a table with an arrow out of it
+        p.setPen(_pen(INK, 3))
+        p.setBrush(QColor(255, 255, 255, 220))
+        p.drawRect(QRectF(8, 14, 34, 36))
+        for y in (26, 38):
+            p.drawLine(QPointF(8, y), QPointF(42, y))
+        p.drawLine(QPointF(25, 14), QPointF(25, 50))
+        p.setPen(_pen(GREEN, 4))
+        p.drawLine(QPointF(38, 32), QPointF(58, 32))
+        p.drawLine(QPointF(50, 24), QPointF(58, 32))
+        p.drawLine(QPointF(50, 40), QPointF(58, 32))
+    elif name == "image":
+        # a picture frame: export the figure
+        p.setPen(_pen(INK, 3))
+        p.setBrush(QColor(255, 255, 255, 220))
+        p.drawRoundedRect(QRectF(8, 12, 48, 40), 4, 4)
+        path = QPainterPath(QPointF(12, 48))
+        path.lineTo(26, 30)
+        path.lineTo(36, 40)
+        path.lineTo(44, 32)
+        path.lineTo(52, 48)
+        path.closeSubpath()
+        p.setPen(Qt.NoPen)
+        p.setBrush(GREEN)
+        p.drawPath(path)
+        p.setBrush(ORANGE)
+        p.drawEllipse(QPointF(44, 22), 4, 4)
+    elif name == "about":
+        p.setPen(_pen(BLUE, 4))
+        p.setBrush(Qt.NoBrush)
+        p.drawEllipse(QPointF(32, 32), 22, 22)
+        p.setPen(_pen(BLUE, 6))
+        p.drawPoint(QPointF(32, 20))
+        p.setPen(_pen(BLUE, 5))
+        p.drawLine(QPointF(32, 29), QPointF(32, 45))
     else:
         p.setPen(_pen(INK, 4))
         p.drawRect(QRectF(16, 16, 32, 32))

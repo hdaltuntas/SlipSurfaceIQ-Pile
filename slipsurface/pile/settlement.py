@@ -75,6 +75,15 @@ def layer_compression(layer: dict, sigma0: float, dsigma: float, h: float) -> Di
     return {"s": dsigma * h / M, "kind": "elastic"}
 
 
+def raft_widening(depth: float, spread: float = 2.0) -> float:
+    """How much wider the loaded area is `depth` below the raft, both sides together.
+
+    The load spreads `spread` vertical to 1 horizontal on each side, so each
+    side moves out by depth/spread and the width grows by twice that.
+    """
+    return 2.0 * depth / spread
+
+
 def equivalent_raft(profile, Q: float, Bg: float, Lg: float, z_raft: float,
                     spread: float = 2.0, slice_size: float = 0.5) -> Dict[str, object]:
     """Settlement of the equivalent raft at depth z_raft, by slices below it.
@@ -88,7 +97,9 @@ def equivalent_raft(profile, Q: float, Bg: float, Lg: float, z_raft: float,
     z_stop = bottom
     for layer, z, h in profile.slices(z_raft, bottom, slice_size):
         depth = z - z_raft
-        widen = depth / spread
+        # spread V : H on each side, so the footprint grows by 2·depth/spread:
+        # the classic 2 : 1 gives (Bg + z)(Lg + z) (Tomlinson).
+        widen = raft_widening(depth, spread)
         dsigma = Q / ((Bg + widen) * (Lg + widen))
         sigma0 = profile.effective_stress(z)
         if sigma0 > 0 and dsigma < INFLUENCE * sigma0:

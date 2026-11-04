@@ -59,6 +59,11 @@ BELOW_TIP = 3.0
 #: The spacing below which a group is closer than the usual minimum, in diameters
 MIN_SPACING = 2.5
 
+#: The embedment into the bearing layer below which the tip is "on" a layer
+#: boundary rather than in the layer, in diameters (Meyerhof's base resistance
+#: needs the tip to be embedded in the bearing stratum)
+MIN_EMBEDMENT = 2.0
+
 #: Layer properties that are numbers, with their defaults
 LAYER_NUMBERS = {"thickness": 0.0, "gamma": 18.0, "gamma_sat": 19.0, "phi": 0.0, "cu": 0.0,
                  "OCR": 1.0, "N60": 0.0, "E": 10.0, "nu": 0.3, "Cc": 0.0, "Cr": 0.0,
@@ -560,6 +565,11 @@ class PileAnalysis:
         method = ev["base"]["methods"][self.tip_method]
         if method.get("limited"):
             self.warnings.append(message("warn_meyerhof_limit", limit=method["limit"]))
+        tip_layer = self.profile.layer_at(z_tip)
+        embedment = z_tip - tip_layer["top"]
+        if tip_layer["top"] > self.top and embedment < MIN_EMBEDMENT * self.D:
+            self.warnings.append(message("warn_tip_embedment", name=tip_layer["name"],
+                                         e=embedment, n=MIN_EMBEDMENT, D=self.D))
         if self.n > 1:
             s = min([v for v, k in ((self.sx, self.nx), (self.sy, self.ny)) if k > 1])
             if s < MIN_SPACING * self.D:
