@@ -25,7 +25,9 @@ from slipsurface.pile.forms import (
 )
 from slipsurface.pile.engine import analyse
 from slipsurface.pile.optimizer import optimize_length
-from slipsurface.pile.plotting import Plotter, PLOT_KEYS
+from slipsurface.pile.plotting import Plotter, SocketPlotter, PLOT_KEYS, SOCKET_PLOT_KEYS
+from slipsurface.pile.socket import analyse_socket
+from slipsurface.pile import summary as summary_mod
 from slipsurface.pile.study import Study
 from slipsurface.pile.i18n import t, warning_text, TRANSLATIONS
 from slipsurface.pile import report as report_mod
@@ -127,6 +129,7 @@ class PileWindow(QMainWindow):
         self.values = defaults(self.lang)
         self.last_result = None
         self.last_study = None
+        self.last_socket = None
         self.interpret = None
         self._dark = False
         self.setStyleSheet(MODERN_STYLE)
@@ -192,6 +195,9 @@ class PileWindow(QMainWindow):
         self.btn_study = QPushButton("Run study")
         self.btn_study.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
         self.btn_study.clicked.connect(self.run_study)
+        self.btn_socket = QPushButton("Analyse socket")
+        self.btn_socket.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
+        self.btn_socket.clicked.connect(self.run_socket)
         self.btn_opt = QPushButton("Optimize L")
         self.btn_opt.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
         self.btn_opt.clicked.connect(self.run_optimize_length)
@@ -203,6 +209,7 @@ class PileWindow(QMainWindow):
         self.btn_report.clicked.connect(self.export_report)
         btn_row.addWidget(self.btn_data)
         btn_row.addWidget(self.btn_analyse)
+        btn_row.addWidget(self.btn_socket)
         btn_row.addWidget(self.btn_study)
         btn_row.addWidget(self.btn_opt)
         btn_row.addWidget(self.btn_interpret)
@@ -230,6 +237,7 @@ class PileWindow(QMainWindow):
         act_save = act("save", "ui_save", self.save_project)
         act_data = act("settings", "ui_data_entry", self.open_data_entry)
         act_analyse = act("analyse", "run_analysis_button", self.run_analysis)
+        act_socket = act("analyse", "run_socket_button", self.run_socket)
         act_study = act("analyse", "study_run", self.run_study)
         act_opt = act("optimize", "ui_optimize_length", self.run_optimize_length)
         act_interpret = act("interpret", "ui_interpret", self.open_interpret)
@@ -261,6 +269,7 @@ class PileWindow(QMainWindow):
         tb.addSeparator()
         tb.addAction(act_data)
         tb.addAction(act_analyse)
+        tb.addAction(act_socket)
         tb.addAction(act_study)
         tb.addAction(act_opt)
         tb.addAction(act_interpret)
@@ -301,6 +310,7 @@ class PileWindow(QMainWindow):
         L = self.lang
         self.btn_data.setText(t(L, "ui_data_entry"))
         self.btn_analyse.setText(t(L, "run_analysis_button"))
+        self.btn_socket.setText(t(L, "run_socket_button"))
         self.btn_study.setText(t(L, "study_run"))
         self.btn_opt.setText(t(L, "ui_optimize_length"))
         self.btn_interpret.setText(t(L, "ui_interpret"))
@@ -361,6 +371,10 @@ class PileWindow(QMainWindow):
                 pass
             self.results.setPlainText("\n".join(lines))
             self.status.showMessage(t(L, "analysis_complete"))
+            self.plot_combo.blockSignals(True)
+            self.plot_combo.clear()
+            self.plot_combo.addItems(PLOT_KEYS)
+            self.plot_combo.blockSignals(False)
             self._update_plot()
             if self.interpret is not None:
                 self.interpret.set_analysis(self.last_result, self.lang)
@@ -368,18 +382,52 @@ class PileWindow(QMainWindow):
             QMessageBox.critical(self, "Analysis error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
 
     def _update_plot(self):
-        if not HAS_MPL or not hasattr(self, "last_result"):
+        if not HAS_MPL:
             return
         key = self.plot_combo.currentText()
         try:
             self.fig.clear()
-            Plotter(self.last_result, self.lang).draw(key, self.fig)
+            if key in SOCKET_PLOT_KEYS:
+                if self.last_socket is None:
+                    return
+                SocketPlotter(self.last_socket, self.lang).draw(key, self.fig)
+            else:
+                if not hasattr(self, "last_result") or self.last_result is None:
+                    return
+                Plotter(self.last_result, self.lang).draw(key, self.fig)
             self.canvas.draw()
         except Exception as exc:
             self.fig.clear()
             ax = self.fig.add_subplot(111)
             ax.text(0.5, 0.5, str(exc), ha="center", va="center")
             self.canvas.draw()
+
+    def run_socket(self):
+        L = self.lang
+        try:
+            socket = analyse_socket(to_config(self.values))
+            self.last_socket = socket
+            res = socket.results
+            lines = [
+                t(L, "ui_socket_header"),
+                summary_mod.socket_headline(socket, L),
+                "",
+                summary_mod.socket_text(socket, L),
+            ]
+            if socket.warnings:
+                lines.append("\n" + t(L, "ui_warnings"))
+                for w in socket.warnings:
+                    lines.append(f"  - {warning_text(L, w)}")
+            self.results.setPlainText("\n".join(lines))
+            self.status.showMessage(t(L, "socket_complete"))
+            self.plot_combo.blockSignals(True)
+            self.plot_combo.clear()
+            self.plot_combo.addItems(SOCKET_PLOT_KEYS)
+            self.plot_combo.blockSignals(False)
+            self._update_plot()
+        except Exception as e:
+            QMessageBox.critical(self, t(L, "run_socket_button"),
+                                 f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
 
     def run_study(self):
         L = self.lang
@@ -434,7 +482,8 @@ class PileWindow(QMainWindow):
         try:
             self.status.showMessage(t(L, "report_running"))
             QApplication.processEvents()
-            report_mod.export_report(path, self.last_result, L, study=self.last_study)
+            report_mod.export_report(path, self.last_result, L, study=self.last_study,
+                                     socket=self.last_socket)
             self.status.showMessage(t(L, "ui_report_written", path=path))
         except Exception as e:
             QMessageBox.critical(self, t(L, "report_action"), str(e))
@@ -482,6 +531,7 @@ class PileWindow(QMainWindow):
         self.values = defaults(self.lang)
         self.last_result = None
         self.last_study = None
+        self.last_socket = None
         self.results.clear()
         self.status.showMessage(t(self.lang, "ui_new_project"))
 
@@ -538,6 +588,7 @@ class PileWindow(QMainWindow):
                 self.values = data
             self.last_result = None
             self.last_study = None
+            self.last_socket = None
             self.status.showMessage(t(self.lang, "ui_opened", path=path))
         except Exception as e:
             QMessageBox.critical(self, "Open error", str(e))

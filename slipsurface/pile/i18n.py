@@ -584,6 +584,7 @@ ENTRIES = {
     "ui_no_analysis": ("Run an analysis first.", "Önce analiz çalıştırın."),
     "ui_report_written": ("Report written to {path}", "Rapor yazıldı: {path}"),
     "ui_results_header": ("=== Analysis Results ===", "=== Analiz Sonuçları ==="),
+    "ui_socket_header": ("=== Rock Socket Results ===", "=== Kaya Soketi Sonuçları ==="),
     "ui_study_header": ("=== Study Results ===", "=== Çalışma Sonuçları ==="),
     "ui_warnings": ("Warnings:", "Uyarılar:"),
     "ui_full_data": ("--- Full data ---", "--- Tüm veri ---"),
