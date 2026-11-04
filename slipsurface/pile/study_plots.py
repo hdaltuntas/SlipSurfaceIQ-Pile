@@ -28,6 +28,32 @@ COLORS = {"Q_ult": PLOT_PALETTE["ultimate"], "Q_ult_net": PLOT_PALETTE["ultimate
           "utilisation_seismic": PLOT_PALETTE["applied"]}
 
 
+def views(study: Study) -> List[str]:
+    """The figures that apply to a study: a one-at-a-time sweep is read
+    against its inputs, a sampled study by its spread and sensitivities."""
+    if study is None or not study.rows:
+        return []
+    return ["oat", "hist"] if study.method == "oat" else ["hist", "scatter", "tornado"]
+
+
+def draw(view: str, fig: Figure, study: Study, L: Dict[str, str], output: str = "FS",
+         theme="light") -> None:
+    """Draws one study view by name."""
+    {"oat": plot_oat, "hist": plot_hist, "scatter": plot_scatter,
+     "tornado": plot_tornado}[view](fig, study, L, output, theme=theme)
+
+
+def _fmt(value: float) -> str:
+    """A number as an engineer reads it: 4,946 · 2.37 · 0.583 — never 4.95e+03."""
+    if not math.isfinite(value):
+        return "—"
+    if abs(value) >= 100:
+        return f"{value:,.0f}"
+    if abs(value) >= 10:
+        return f"{value:.1f}"
+    return f"{value:.3g}" if abs(value) >= 1e-3 or value == 0 else f"{value:.2e}"
+
+
 def _label(L: Dict[str, str], key: str) -> str:
     """An output's name; the translations carry its unit."""
     return L.get(f"out_{key}", key)
@@ -112,11 +138,11 @@ def plot_hist(fig: Figure, study: Study, L: Dict[str, str], output: str = "FS",
     ax.hist(values, bins=min(40, max(8, int(math.sqrt(values.size)))),
             color=COLORS.get(output, th["accent"]), edgecolor=th["panel"], linewidth=0.6)
     ax.axvline(float(values.mean()), color=th["fg_dim"], linestyle="-", linewidth=1.2,
-               label=f"{L.get('st_mean', 'mean')} = {values.mean():.3g}")
+               label=f"{L.get('st_mean', 'mean')} = {_fmt(values.mean())}")
     capacity = _capacity(study, output)
     if capacity is not None and math.isfinite(capacity):
         ax.axvline(capacity, color=PLOT_PALETTE["limit"], linestyle="--", linewidth=1.6,
-                   label=f"{capacity:.3g}")
+                   label=f"{_fmt(capacity)}")
     ax.set_xlabel(_label(L, output), fontsize=9)
     ax.set_ylabel("n", fontsize=9)
     legend = ax.legend(fontsize=8.5, frameon=False)

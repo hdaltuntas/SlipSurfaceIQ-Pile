@@ -1,12 +1,9 @@
 {
   "key": "pile",
   "name": "Pile",
-  "tr": "Kazık",
   "group": "Foundations",
   "description": "Axial capacity, group and socket assessment",
-  "description_tr": "Kazıkların eksenel kapasitesi, grup etkisi ve soket analizi.",
   "version": "2026.0.0",
   "requires_core": ">=0.1.0",
-  "order": 7,
-  "session": "slipsurface.pile.web.session"
+  "order": 7
 }

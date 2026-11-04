@@ -297,13 +297,10 @@ def render_study_figures(study, lang: str, dpi: int = 110) -> Dict[str, bytes]:
     if study is None or not study.rows:
         return {}
     L = TRANSLATIONS.get(lang, TRANSLATIONS["en"])
-    views = ["oat", "hist"] if study.method == "oat" else ["hist", "scatter", "tornado"]
-    draw = {"oat": study_plots.plot_oat, "hist": study_plots.plot_hist,
-            "scatter": study_plots.plot_scatter, "tornado": study_plots.plot_tornado}
     out = {}
-    for view in views:
+    for view in study_plots.views(study):
         fig = Figure(figsize=(10, 7), dpi=dpi)
-        draw[view](fig, study, L, "FS", theme="paper")
+        study_plots.draw(view, fig, study, L, "FS", theme="paper")
         out[f"study_{view}"] = _png(fig, dpi)
     return out
 
