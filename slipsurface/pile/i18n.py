@@ -553,6 +553,65 @@ ENTRIES = {
     "report_action": ("Export report…", "Rapor al…"),
     "report_running": ("Writing the report…", "Rapor yazılıyor…"),
 
+    # ------------------------------------------------------------------ desktop UI shell
+    "ui_data_entry": ("Data Entry…", "Veri girişi…"),
+    "ui_optimize_length": ("Optimize L", "Boyu eniyile"),
+    "ui_interpret": ("Interpret", "Yorumla"),
+    "ui_export_plot": ("Export Plot", "Şekli dışa aktar"),
+    "ui_results_tab": ("Results", "Sonuçlar"),
+    "ui_plots_tab": ("Plots", "Şekiller"),
+    "ui_summary_tab": ("Summary", "Özet"),
+    "ui_figure": ("Figure", "Şekil"),
+    "ui_menu_file": ("&File", "&Dosya"),
+    "ui_menu_language": ("&Language", "&Dil"),
+    "ui_menu_view": ("&View", "&Görünüm"),
+    "ui_new": ("New", "Yeni"),
+    "ui_open": ("Open…", "Aç…"),
+    "ui_save": ("Save…", "Kaydet…"),
+    "ui_quit": ("Quit", "Çıkış"),
+    "ui_refresh": ("Refresh", "Yenile"),
+    "ui_dark_mode": ("Dark mode", "Karanlık mod"),
+    "ui_light_mode": ("Light mode", "Aydınlık mod"),
+    "ui_help": ("Help", "Yardım"),
+    "ui_interpret_title": ("SlipSurfaceIQ Pile — Interpret", "SlipSurfaceIQ Pile — Yorumla"),
+    "ui_ready": ("Ready — enter pile and soil data, then Analyse",
+                 "Hazır — kazık ve zemin verisini girip Analiz'e basın"),
+    "ui_data_updated": ("Data updated", "Veri güncellendi"),
+    "ui_new_project": ("New project", "Yeni proje"),
+    "ui_opened": ("Opened {path}", "Açıldı: {path}"),
+    "ui_saved": ("Saved {path}", "Kaydedildi: {path}"),
+    "ui_language": ("Language: {lang}", "Dil: {lang}"),
+    "ui_no_analysis": ("Run an analysis first.", "Önce analiz çalıştırın."),
+    "ui_report_written": ("Report written to {path}", "Rapor yazıldı: {path}"),
+    "ui_results_header": ("=== Analysis Results ===", "=== Analiz Sonuçları ==="),
+    "ui_study_header": ("=== Study Results ===", "=== Çalışma Sonuçları ==="),
+    "ui_warnings": ("Warnings:", "Uyarılar:"),
+    "ui_full_data": ("--- Full data ---", "--- Tüm veri ---"),
+    "ui_opt_title": ("Length optimization", "Boy eniyileme"),
+    "ui_popsize": ("Population size", "Popülasyon boyutu"),
+    "ui_maxiter": ("Max iterations", "Maks. iterasyon"),
+    "ui_lmin": ("L min (m)", "L min (m)"),
+    "ui_lmax": ("L max (m)", "L maks (m)"),
+    "ui_best_l": ("Best L = {L:.2f} m", "En iyi L = {L:.2f} m"),
+    "ui_opt_header": ("=== Length Optimization ===", "=== Boy Eniyileme ==="),
+    "ui_soil_tab": ("Soil Profile", "Zemin Profili"),
+    "ui_study_vars_tab": ("Study Variables", "Çalışma Değişkenleri"),
+    "ui_add_row": ("+ Add row", "+ Satır ekle"),
+    "ui_help_text": ("{app} {version}\n\n"
+                     "1. Enter soil profile and pile data via Data Entry\n"
+                     "2. Analyse\n"
+                     "3. View results and plots, or open Interpret\n"
+                     "4. Optimize L for shortest safe length\n"
+                     "5. Run a study, then export a PDF/HTML report\n\n"
+                     "CLI: python main.py analyze|optimize-length ...",
+                     "{app} {version}\n\n"
+                     "1. Veri girişinden zemin profili ve kazık verisini girin\n"
+                     "2. Analiz\n"
+                     "3. Sonuçları ve şekilleri görün, ya da Yorumla'yı açın\n"
+                     "4. En kısa güvenli boy için L'yi eniyileyin\n"
+                     "5. Çalışma çalıştırıp PDF/HTML rapor alın\n\n"
+                     "CLI: python main.py analyze|optimize-length ..."),
+
     # ------------------------------------------------------------------ study
     "group_study": ("Study options", "Çalışma seçenekleri"),
     "study_method": ("Sampling", "Örnekleme"),
