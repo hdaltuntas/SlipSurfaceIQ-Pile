@@ -38,14 +38,28 @@ class DataEntryDialog(QDialog):
 
     def _build_tabs(self):
         sch = schema(self.lang)
+        self._socket_tab = None
         if "soil" in sch and "columns" in sch["soil"]:
             self.tabs.addTab(self._make_table_page("soil", sch["soil"]), t(self.lang, "ui_soil_tab"))
         for part in ("project", "pile", "options", "socket", "study"):
             if part in sch and "groups" in sch[part]:
-                self.tabs.addTab(self._make_groups_page(part, sch[part]), part.capitalize())
+                index = self.tabs.addTab(self._make_groups_page(part, sch[part]), part.capitalize())
+                if part == "socket":
+                    self._socket_tab = index
         if "study_vars" in sch and "columns" in sch["study_vars"]:
             self.tabs.addTab(self._make_table_page("study_vars", sch["study_vars"]),
                              t(self.lang, "ui_study_vars_tab"))
+        pile_type = self.fields.get("pile_type")
+        if isinstance(pile_type, QComboBox):
+            pile_type.currentIndexChanged.connect(self._sync_tabs)
+        self._sync_tabs()
+
+    def _sync_tabs(self):
+        if self._socket_tab is None:
+            return
+        pile_type = self.fields.get("pile_type")
+        is_socket = isinstance(pile_type, QComboBox) and pile_type.currentData() == "socket"
+        self.tabs.setTabEnabled(self._socket_tab, is_socket)
 
     def _make_table_page(self, name: str, spec: dict) -> QWidget:
         scroll = QScrollArea()
