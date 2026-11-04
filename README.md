@@ -2,7 +2,7 @@
 
 **Axial pile capacity, group action, settlement and rock-socket analysis — desktop GUI**
 
-Standalone desktop program extracted from SlipSurfaceIQ-Suite, with a light PySide6 interface styled after SlipSurfaceIQ-LE (Fusion style, fixed light palette, professional form-based inputs).
+Standalone desktop program extracted from SlipSurfaceIQ-Suite, with a light PySide6 interface styled after SlipSurfaceIQ-LE (Fusion style, fixed light palette, professional form-based inputs). The interface language is English; see **Help → About** in the app for the full list of technologies and the license.
 
 ## Features
 
@@ -48,4 +48,8 @@ python main.py --check
 
 Results depend on input parameters and methods selected. Always verify with engineering judgement. No warranty.
 
-License: see LICENSE.
+## Technologies
+
+Python 3.10+; PySide6 (Qt) desktop GUI; NumPy and SciPy for the analysis and optimization; Matplotlib for figures; ReportLab (PDF), python-docx (Word) and openpyxl (XLSX) for report/export files.
+
+License: GNU Affero General Public License v3 (AGPLv3) — see [LICENSE](LICENSE).

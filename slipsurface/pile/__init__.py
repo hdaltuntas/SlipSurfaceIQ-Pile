@@ -28,14 +28,13 @@ soil profile can carry, how long it has to be, and how much it settles:
 On top of it, a parametric or reliability study sweeps any input (a range, or
 a distribution) and reports sensitivities and the probability of failure.
 
-The interface is a local web server driven from the browser (standard library
-only), so the program also runs over a remote session or inside a container,
-where a desktop toolkit would need a display it does not have.
+The interface is a PySide6 desktop GUI; the same engine also runs from the
+command line, so the program works inside a container without a display.
 
 Package layout
 --------------
     slipsurface.pile.config        app identity, defaults, themes, palette
-    slipsurface.pile.i18n          every text of the program, English and Turkish
+    slipsurface.pile.i18n          every text of the program (English)
     slipsurface.pile.profile       the layered soil column and its stresses
     slipsurface.pile.axial         unit shaft friction and base resistance, per method
     slipsurface.pile.group         group efficiency and block failure
@@ -47,9 +46,8 @@ Package layout
     slipsurface.pile.study_plots   study figures
     slipsurface.pile.report        calculation report: HTML, PDF, DOCX
     slipsurface.pile.forms         input schema and readers (interface-independent)
-    slipsurface.pile.web           local web server and the browser interface
 
-Run it:  slipsurface-pile          (or  python -m slipsurface.pile)
+Run it:  slipsurface-pile run project.pile.json   (or  python -m slipsurface.pile)
 """
 
 from slipsurface.versioning import module_version

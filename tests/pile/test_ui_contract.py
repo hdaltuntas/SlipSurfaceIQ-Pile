@@ -15,23 +15,21 @@ from slipsurface.pile.i18n import ENTRIES, TRANSLATIONS, t
 UI_DIR = Path(__file__).resolve().parents[2] / "slipsurface" / "ui"
 
 
-def test_translations_have_identical_keys_in_both_languages():
-    assert set(TRANSLATIONS["en"]) == set(TRANSLATIONS["tr"])
+def test_the_interface_is_english_only():
+    assert list(TRANSLATIONS) == ["en"]
     assert set(TRANSLATIONS["en"]) == set(ENTRIES)
 
 
 def test_no_translation_placeholder_collides_with_t_parameters():
     # t(lang, key, **params): a {lang} or {key} placeholder cannot be formatted
     reserved = {"lang", "key"}
-    for name, (en, tr) in ENTRIES.items():
-        for text in (en, tr):
-            fields = set(re.findall(r"\{(\w+)", text))
-            assert not fields & reserved, f"{name}: {fields & reserved}"
+    for name, text in ENTRIES.items():
+        fields = set(re.findall(r"\{(\w+)", text))
+        assert not fields & reserved, f"{name}: {fields & reserved}"
 
 
 def test_ui_language_message_formats_without_collision():
-    assert t("en", "ui_language", code="tr") == "Language: tr"
-    assert t("tr", "ui_language", code="en") == "Dil: en"
+    assert t("en", "ui_language", code="en") == "Language: en"
 
 
 def _table_value_keys():

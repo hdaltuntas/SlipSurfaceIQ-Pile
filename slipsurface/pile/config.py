@@ -62,7 +62,7 @@ SOCKET_BASE_DESIGN = ["none", "min", "mean"] + SOCKET_BASE_METHODS
 #: The rock mass modulus: from RQD (Gardner), from GSI (Hoek & Diederichs), or entered
 MODULUS_METHODS = ["rqd", "gsi", "direct"]
 
-# --- Interface theme (web/static/style.css) and plot palette ---------------
+# --- Interface theme and plot palette --------------------------------------
 # --- kept together so the figures always match the page they are shown on. -
 ACCENT = "#5B7A3A"  # the colour of its group in the suite (foundations)
 
