@@ -27,17 +27,18 @@ except ImportError:
     Figure = None
 
 from slipsurface.pile.plotting import Plotter, PLOT_KEYS
+from slipsurface.pile.i18n import t
 
 
 class InterpretWindow(QMainWindow):
     """Separate results window showing summary text and interactive plots."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, lang: str = "en"):
         super().__init__(parent)
-        self.setWindowTitle("SlipSurfaceIQ Pile — Interpret")
-        self.resize(900, 700)
+        self.lang = lang
         self.analysis = None
-        self.lang = "en"
+        self.setWindowTitle(t(lang, "ui_interpret_title"))
+        self.resize(900, 700)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -55,7 +56,8 @@ class InterpretWindow(QMainWindow):
         plot_w = QWidget()
         pl = QVBoxLayout(plot_w)
         top = QHBoxLayout()
-        top.addWidget(QLabel("Figure:"))
+        self.lbl_figure = QLabel("Figure:")
+        top.addWidget(self.lbl_figure)
         self.plot_combo = QComboBox()
         self.plot_combo.addItems(PLOT_KEYS)
         self.plot_combo.currentTextChanged.connect(self.refresh_plot)
@@ -74,12 +76,21 @@ class InterpretWindow(QMainWindow):
         # Toolbar
         tb = QToolBar("Interpret")
         self.addToolBar(tb)
-        act_refresh = QAction("Refresh", self)
-        act_refresh.triggered.connect(self.refresh)
-        tb.addAction(act_refresh)
+        self.act_refresh = QAction("Refresh", self)
+        self.act_refresh.triggered.connect(self.refresh)
+        tb.addAction(self.act_refresh)
 
         self.status = QStatusBar()
         self.setStatusBar(self.status)
+        self.retranslate(lang)
+
+    def retranslate(self, lang: str):
+        self.lang = lang
+        self.setWindowTitle(t(lang, "ui_interpret_title"))
+        self.tabs.setTabText(0, t(lang, "ui_summary_tab"))
+        self.tabs.setTabText(1, t(lang, "ui_plots_tab"))
+        self.lbl_figure.setText(t(lang, "ui_figure") + ":")
+        self.act_refresh.setText(t(lang, "ui_refresh"))
 
     def set_analysis(self, analysis, lang: str = "en"):
         self.analysis = analysis
@@ -88,7 +99,7 @@ class InterpretWindow(QMainWindow):
 
     def refresh(self):
         if self.analysis is None:
-            self.summary.setPlainText("No analysis yet.")
+            self.summary.setPlainText(t(self.lang, "ui_no_analysis"))
             return
         # Summary text
         res = getattr(self.analysis, "results", self.analysis)
@@ -109,7 +120,7 @@ class InterpretWindow(QMainWindow):
                 lines.append(f"  - {w}")
         self.summary.setPlainText("\n".join(lines))
         self.refresh_plot()
-        self.status.showMessage("Results updated")
+        self.status.showMessage(t(self.lang, "analysis_complete"))
 
     def refresh_plot(self):
         if not HAS_MPL or self.analysis is None:

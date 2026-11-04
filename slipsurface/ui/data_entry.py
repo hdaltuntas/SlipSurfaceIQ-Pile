@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from slipsurface.pile.forms import schema, defaults
+from slipsurface.pile.i18n import t
 
 #: Schema table name -> flat key the values dictionary uses
 TABLE_VALUE_KEYS = {"soil": "soil_profile", "study_vars": "study_variables"}
@@ -19,7 +20,7 @@ TABLE_VALUE_KEYS = {"soil": "soil_profile", "study_vars": "study_variables"}
 class DataEntryDialog(QDialog):
     def __init__(self, parent=None, lang: str = "en", values: dict | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Data Entry — SlipSurfaceIQ Pile")
+        self.setWindowTitle(f"{t(lang, 'ui_data_entry')} — SlipSurfaceIQ Pile")
         self.resize(900, 700)
         self.lang = lang
         self.values = values or defaults(lang)
@@ -39,12 +40,13 @@ class DataEntryDialog(QDialog):
     def _build_tabs(self):
         sch = schema(self.lang)
         if "soil" in sch and "columns" in sch["soil"]:
-            self.tabs.addTab(self._make_table_page("soil", sch["soil"]), "Soil Profile")
+            self.tabs.addTab(self._make_table_page("soil", sch["soil"]), t(self.lang, "ui_soil_tab"))
         for part in ("project", "pile", "options", "socket", "study"):
             if part in sch and "groups" in sch[part]:
                 self.tabs.addTab(self._make_groups_page(part, sch[part]), part.capitalize())
         if "study_vars" in sch and "columns" in sch["study_vars"]:
-            self.tabs.addTab(self._make_table_page("study_vars", sch["study_vars"]), "Study Variables")
+            self.tabs.addTab(self._make_table_page("study_vars", sch["study_vars"]),
+                             t(self.lang, "ui_study_vars_tab"))
 
     def _make_table_page(self, name: str, spec: dict) -> QWidget:
         scroll = QScrollArea()
@@ -66,7 +68,7 @@ class DataEntryDialog(QDialog):
             for c, col in enumerate(cols):
                 table.setItem(r, c, QTableWidgetItem(str(row.get(col["key"], ""))))
         lay.addWidget(table)
-        add = QPushButton("+ Add row")
+        add = QPushButton(t(self.lang, "ui_add_row"))
         add.clicked.connect(lambda: table.insertRow(table.rowCount()))
         lay.addWidget(add)
         scroll.setWidget(w)

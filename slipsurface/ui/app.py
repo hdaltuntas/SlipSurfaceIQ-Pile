@@ -20,10 +20,17 @@ from PySide6.QtWidgets import (
     QStatusBar, QDialog, QDialogButtonBox,
 )
 
-from slipsurface.pile.forms import defaults, to_config, from_config, project_file
+from slipsurface.pile.forms import (
+    defaults, to_config, from_config, project_file, study_spec, study_variables,
+)
 from slipsurface.pile.engine import analyse
 from slipsurface.pile.optimizer import optimize_length
-from slipsurface.pile.plotting import Plotter, PLOT_KEYS
+from slipsurface.pile.plotting import Plotter, SocketPlotter, PLOT_KEYS, SOCKET_PLOT_KEYS
+from slipsurface.pile.socket import analyse_socket
+from slipsurface.pile import summary as summary_mod
+from slipsurface.pile.study import Study
+from slipsurface.pile.i18n import t, warning_text, TRANSLATIONS
+from slipsurface.pile import report as report_mod
 from slipsurface.pile import APP_NAME, __version__
 from slipsurface.ui.interpret import InterpretWindow
 from slipsurface.ui.icons import icon
@@ -121,12 +128,15 @@ class PileWindow(QMainWindow):
         self.lang = "en"
         self.values = defaults(self.lang)
         self.last_result = None
+        self.last_study = None
+        self.last_socket = None
         self.interpret = None
+        self._dark = False
         self.setStyleSheet(MODERN_STYLE)
         self._build_ui()
         self.status = QStatusBar()
         self.setStatusBar(self.status)
-        self.status.showMessage("Ready — enter pile and soil data, then Analyse")
+        self.retranslate_ui()
 
     def _build_ui(self):
         central = QWidget()
@@ -150,6 +160,7 @@ class PileWindow(QMainWindow):
 
         # Main area is results only
         right = QTabWidget()
+        self.tabs = right
         self.results = QTextEdit()
         self.results.setReadOnly(True)
         self.results.setPlaceholderText("Analysis results will appear here…\n\nUse Data Entry to enter pile and soil data.")
@@ -158,7 +169,8 @@ class PileWindow(QMainWindow):
         plot_w = QWidget()
         pl = QVBoxLayout(plot_w)
         top = QHBoxLayout()
-        top.addWidget(QLabel("Figure"))
+        self.lbl_figure = QLabel("Figure")
+        top.addWidget(self.lbl_figure)
         self.plot_combo = QComboBox()
         self.plot_combo.addItems(PLOT_KEYS)
         self.plot_combo.currentTextChanged.connect(self._update_plot)
@@ -180,16 +192,28 @@ class PileWindow(QMainWindow):
         self.btn_data.clicked.connect(self.open_data_entry)
         self.btn_analyse = QPushButton("Analyse")
         self.btn_analyse.clicked.connect(self.run_analysis)
+        self.btn_study = QPushButton("Run study")
+        self.btn_study.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
+        self.btn_study.clicked.connect(self.run_study)
+        self.btn_socket = QPushButton("Analyse socket")
+        self.btn_socket.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
+        self.btn_socket.clicked.connect(self.run_socket)
         self.btn_opt = QPushButton("Optimize L")
         self.btn_opt.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
         self.btn_opt.clicked.connect(self.run_optimize_length)
         self.btn_interpret = QPushButton("Interpret")
         self.btn_interpret.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
         self.btn_interpret.clicked.connect(self.open_interpret)
+        self.btn_report = QPushButton("Export report…")
+        self.btn_report.setStyleSheet(f"background: white; color: {ACCENT}; border: 1px solid {BORDER};")
+        self.btn_report.clicked.connect(self.export_report)
         btn_row.addWidget(self.btn_data)
         btn_row.addWidget(self.btn_analyse)
+        btn_row.addWidget(self.btn_socket)
+        btn_row.addWidget(self.btn_study)
         btn_row.addWidget(self.btn_opt)
         btn_row.addWidget(self.btn_interpret)
+        btn_row.addWidget(self.btn_report)
         btn_row.addStretch()
         root.addLayout(btn_row)
 
@@ -199,30 +223,29 @@ class PileWindow(QMainWindow):
     def _build_toolbar(self):
         tb = self.addToolBar("Main")
         tb.setMovable(False)
-        tb.setIconSize(tb.iconSize())
 
-        act_new = QAction(icon("new"), "New", self)
-        act_new.triggered.connect(self.new_project)
-        act_open = QAction(icon("open"), "Open", self)
-        act_open.triggered.connect(self.open_project)
-        act_save = QAction(icon("save"), "Save", self)
-        act_save.triggered.connect(self.save_project)
-        act_data = QAction(icon("settings"), "Data Entry", self)
-        act_data.triggered.connect(self.open_data_entry)
-        act_analyse = QAction(icon("analyse"), "Analyse", self)
-        act_analyse.triggered.connect(self.run_analysis)
-        act_opt = QAction(icon("optimize"), "Optimize L", self)
-        act_opt.triggered.connect(self.run_optimize_length)
-        act_interpret = QAction(icon("interpret"), "Interpret", self)
-        act_interpret.triggered.connect(self.open_interpret)
-        act_refresh = QAction(icon("refresh"), "Refresh Plot", self)
-        act_refresh.triggered.connect(self._update_plot)
-        act_export = QAction(icon("export"), "Export Plot", self)
-        act_export.triggered.connect(self.export_plot)
-        act_help = QAction(icon("help"), "Help", self)
-        act_help.triggered.connect(self.show_help)
-        act_lang = QAction(icon("language"), "Language", self)
-        act_lang.triggered.connect(self.toggle_language)
+        self._actions = []
+
+        def act(ic, key, slot):
+            a = QAction(icon(ic), key, self)
+            a.triggered.connect(slot)
+            self._actions.append((a, key))
+            return a
+
+        act_new = act("new", "ui_new", self.new_project)
+        act_open = act("open", "ui_open", self.open_project)
+        act_save = act("save", "ui_save", self.save_project)
+        act_data = act("settings", "ui_data_entry", self.open_data_entry)
+        act_analyse = act("analyse", "run_analysis_button", self.run_analysis)
+        act_socket = act("analyse", "run_socket_button", self.run_socket)
+        act_study = act("analyse", "study_run", self.run_study)
+        act_opt = act("optimize", "ui_optimize_length", self.run_optimize_length)
+        act_interpret = act("interpret", "ui_interpret", self.open_interpret)
+        act_refresh = act("refresh", "ui_refresh", self._update_plot)
+        act_export = act("export", "ui_export_plot", self.export_plot)
+        act_report = act("report", "report_action", self.export_report)
+        act_help = act("help", "ui_help", self.show_help)
+        act_lang = act("language", "ui_menu_language", self.toggle_language)
 
         # Dark mode icon (custom)
         pm = QPixmap(24, 24)
@@ -238,6 +261,7 @@ class PileWindow(QMainWindow):
         act_dark.setCheckable(True)
         act_dark.triggered.connect(self.toggle_dark)
         self.act_dark = act_dark
+        self._actions.append((act_dark, "ui_dark_mode"))
 
         tb.addAction(act_new)
         tb.addAction(act_open)
@@ -245,11 +269,14 @@ class PileWindow(QMainWindow):
         tb.addSeparator()
         tb.addAction(act_data)
         tb.addAction(act_analyse)
+        tb.addAction(act_socket)
+        tb.addAction(act_study)
         tb.addAction(act_opt)
         tb.addAction(act_interpret)
         tb.addSeparator()
         tb.addAction(act_refresh)
         tb.addAction(act_export)
+        tb.addAction(act_report)
         tb.addSeparator()
         tb.addAction(act_dark)
         tb.addAction(act_lang)
@@ -257,28 +284,64 @@ class PileWindow(QMainWindow):
 
     def _build_menu(self):
         menu = self.menuBar()
+        self._menus = []
         file_m = menu.addMenu("&File")
-        file_m.addAction("Open…", self.open_project)
-        file_m.addAction("Save…", self.save_project)
+        self._menus.append((file_m, "ui_menu_file"))
+        self._file_actions = [
+            file_m.addAction("Open…", self.open_project),
+            file_m.addAction("Save…", self.save_project),
+        ]
         file_m.addSeparator()
-        file_m.addAction("Quit", self.close)
+        self._file_actions.append(file_m.addAction("Quit", self.close))
+        self._file_keys = ["ui_open", "ui_save", "ui_quit"]
+        file_m.addSeparator()
+        self._file_actions.append(file_m.addAction("report", self.export_report))
+        self._file_keys.append("report_action")
         lang_m = menu.addMenu("&Language")
+        self._menus.append((lang_m, "ui_menu_language"))
         lang_m.addAction("English", lambda: self.set_language("en"))
         lang_m.addAction("Türkçe", lambda: self.set_language("tr"))
         view_m = menu.addMenu("&View")
-        view_m.addAction("Interpret Window", self.open_interpret)
+        self._menus.append((view_m, "ui_menu_view"))
+        view_m.addAction("Interpret", self.open_interpret)
+        self._view_key_action = view_m.actions()[0]
+
+    def retranslate_ui(self):
+        L = self.lang
+        self.btn_data.setText(t(L, "ui_data_entry"))
+        self.btn_analyse.setText(t(L, "run_analysis_button"))
+        self.btn_socket.setText(t(L, "run_socket_button"))
+        self.btn_study.setText(t(L, "study_run"))
+        self.btn_opt.setText(t(L, "ui_optimize_length"))
+        self.btn_interpret.setText(t(L, "ui_interpret"))
+        self.btn_report.setText(t(L, "report_action"))
+        self.tabs.setTabText(0, t(L, "ui_results_tab"))
+        self.tabs.setTabText(1, t(L, "ui_plots_tab"))
+        self.lbl_figure.setText(t(L, "ui_figure"))
+        self.results.setPlaceholderText(t(L, "ui_no_analysis"))
+        for a, key in self._actions:
+            a.setText(t(L, "ui_light_mode") if key == "ui_dark_mode" and self._dark
+                      else t(L, key))
+        for m, key in self._menus:
+            m.setTitle(t(L, key))
+        for a, key in zip(self._file_actions, self._file_keys):
+            a.setText(t(L, key))
+        self._view_key_action.setText(t(L, "ui_interpret"))
+        if self.interpret is not None:
+            self.interpret.retranslate(L)
 
     def set_language(self, lang: str):
         if lang == self.lang:
             return
         self.lang = lang
-        self.status.showMessage(f"Language: {lang}")
+        self.retranslate_ui()
+        self.status.showMessage(t(lang, "ui_language", lang=lang))
 
     def open_data_entry(self):
         dlg = DataEntryDialog(self, self.lang, self.values)
         if dlg.exec() == QDialog.Accepted:
             self.values = dlg.collect()
-            self.status.showMessage("Data updated")
+            self.status.showMessage(t(self.lang, "ui_data_updated"))
 
     def run_analysis(self):
         try:
@@ -286,8 +349,9 @@ class PileWindow(QMainWindow):
             result = analyse(cfg)
             self.last_result = result
             res = result.results if hasattr(result, "results") else {}
+            L = self.lang
             lines = [
-                "=== Analysis Results ===",
+                t(L, "ui_results_header"),
                 f"FS: {res.get('FS', '—')}",
                 f"Q_ult: {res.get('Q_ult', '—')} kN",
                 f"Q_all: {res.get('Q_all', '—')} kN",
@@ -297,16 +361,20 @@ class PileWindow(QMainWindow):
                 f"D: {getattr(result, 'D', '—')} m",
             ]
             if hasattr(result, "warnings") and result.warnings:
-                lines.append("\nWarnings:")
+                lines.append("\n" + t(L, "ui_warnings"))
                 for w in result.warnings:
-                    lines.append(f"  - {w}")
+                    lines.append(f"  - {warning_text(L, w)}")
             try:
                 full = json.dumps(vars(result), indent=2, default=str, ensure_ascii=False)[:8000]
-                lines.append("\n--- Full data ---\n" + full)
+                lines.append("\n" + t(L, "ui_full_data") + "\n" + full)
             except Exception:
                 pass
             self.results.setPlainText("\n".join(lines))
-            self.status.showMessage("Analysis complete")
+            self.status.showMessage(t(L, "analysis_complete"))
+            self.plot_combo.blockSignals(True)
+            self.plot_combo.clear()
+            self.plot_combo.addItems(PLOT_KEYS)
+            self.plot_combo.blockSignals(False)
             self._update_plot()
             if self.interpret is not None:
                 self.interpret.set_analysis(self.last_result, self.lang)
@@ -314,12 +382,19 @@ class PileWindow(QMainWindow):
             QMessageBox.critical(self, "Analysis error", f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
 
     def _update_plot(self):
-        if not HAS_MPL or not hasattr(self, "last_result"):
+        if not HAS_MPL:
             return
         key = self.plot_combo.currentText()
         try:
             self.fig.clear()
-            Plotter(self.last_result, self.lang).draw(key, self.fig)
+            if key in SOCKET_PLOT_KEYS:
+                if self.last_socket is None:
+                    return
+                SocketPlotter(self.last_socket, self.lang).draw(key, self.fig)
+            else:
+                if not hasattr(self, "last_result") or self.last_result is None:
+                    return
+                Plotter(self.last_result, self.lang).draw(key, self.fig)
             self.canvas.draw()
         except Exception as exc:
             self.fig.clear()
@@ -327,18 +402,105 @@ class PileWindow(QMainWindow):
             ax.text(0.5, 0.5, str(exc), ha="center", va="center")
             self.canvas.draw()
 
+    def run_socket(self):
+        L = self.lang
+        try:
+            socket = analyse_socket(to_config(self.values))
+            self.last_socket = socket
+            res = socket.results
+            lines = [
+                t(L, "ui_socket_header"),
+                summary_mod.socket_headline(socket, L),
+                "",
+                summary_mod.socket_text(socket, L),
+            ]
+            if socket.warnings:
+                lines.append("\n" + t(L, "ui_warnings"))
+                for w in socket.warnings:
+                    lines.append(f"  - {warning_text(L, w)}")
+            self.results.setPlainText("\n".join(lines))
+            self.status.showMessage(t(L, "socket_complete"))
+            self.plot_combo.blockSignals(True)
+            self.plot_combo.clear()
+            self.plot_combo.addItems(SOCKET_PLOT_KEYS)
+            self.plot_combo.blockSignals(False)
+            self._update_plot()
+        except Exception as e:
+            QMessageBox.critical(self, t(L, "run_socket_button"),
+                                 f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
+
+    def run_study(self):
+        L = self.lang
+        spec = study_spec(self.values)
+        variables = study_variables(self.values)
+        if not variables:
+            QMessageBox.warning(self, t(L, "study_run"), t(L, "study_no_vars"))
+            return
+        try:
+            cfg = to_config(self.values)
+            study = Study(cfg, variables, spec["method"], spec["n"], spec["seed"])
+
+            def progress(done, total):
+                self.status.showMessage(t(L, "study_progress", done=done, total=total))
+                QApplication.processEvents()
+
+            study.run(progress=progress)
+            self.last_study = study
+            s = study.summary
+            lines = [t(L, "ui_study_header"),
+                     t(L, "st_info", method=study.method, n=s.get("n_total", 0),
+                       ok=s.get("n_ok", 0))]
+            rel = s.get("reliability") or {}
+            if rel:
+                lines.append("\n" + t(L, "st_rel_title"))
+                for key, r in rel.items():
+                    label = TRANSLATIONS.get(L, TRANSLATIONS["en"]).get("out_" + key, key)
+                    lines.append(f"  {label}: pf = {r.get('pf', float('nan')):.4f}, "
+                                 f"β = {r.get('beta', float('nan')):.2f}")
+            stats = s.get("stats") or {}
+            if stats:
+                lines.append("\n" + t(L, "st_stats_title"))
+                for key, st in stats.items():
+                    lines.append(f"  {key}: mean {st['mean']:.2f}, std {st['std']:.2f}, "
+                                 f"p5 {st['p5']:.2f}, p95 {st['p95']:.2f} {st.get('unit', '')}")
+            self.results.setPlainText("\n".join(lines))
+            self.status.showMessage(t(L, "study_done", n=len(study.rows)))
+        except Exception as e:
+            QMessageBox.critical(self, t(L, "study_run"),
+                                 t(L, "study_failed", e=f"{type(e).__name__}: {e}"))
+
+    def export_report(self):
+        L = self.lang
+        if not hasattr(self, "last_result") or self.last_result is None:
+            QMessageBox.information(self, t(L, "report_action"), t(L, "ui_no_analysis"))
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, t(L, "report_action"), "report.pdf",
+            "PDF (*.pdf);;HTML (*.html);;Word (*.docx)")
+        if not path:
+            return
+        try:
+            self.status.showMessage(t(L, "report_running"))
+            QApplication.processEvents()
+            report_mod.export_report(path, self.last_result, L, study=self.last_study,
+                                     socket=self.last_socket)
+            self.status.showMessage(t(L, "ui_report_written", path=path))
+        except Exception as e:
+            QMessageBox.critical(self, t(L, "report_action"), str(e))
+
     def run_optimize_length(self):
+        L = self.lang
         dlg = QDialog(self)
-        dlg.setWindowTitle("Length optimization")
+        dlg.setWindowTitle(t(L, "ui_opt_title"))
         form = QFormLayout(dlg)
         sp_pop = QSpinBox(); sp_pop.setRange(5, 50); sp_pop.setValue(10)
         sp_iter = QSpinBox(); sp_iter.setRange(5, 100); sp_iter.setValue(25)
         sp_lmin = QDoubleSpinBox(); sp_lmin.setRange(0.5, 100); sp_lmin.setValue(3.0)
         sp_lmax = QDoubleSpinBox(); sp_lmax.setRange(1.0, 200); sp_lmax.setValue(40.0)
-        form.addRow("Population size", sp_pop)
-        form.addRow("Max iterations", sp_iter)
-        form.addRow("L min (m)", sp_lmin)
-        form.addRow("L max (m)", sp_lmax)
+        form.addRow(t(L, "ui_popsize"), sp_pop)
+        form.addRow(t(L, "ui_maxiter"), sp_iter)
+        form.addRow(t(L, "ui_lmin"), sp_lmin)
+        form.addRow(t(L, "ui_lmax"), sp_lmax)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dlg.accept)
         buttons.rejected.connect(dlg.reject)
@@ -347,20 +509,20 @@ class PileWindow(QMainWindow):
             return
         try:
             cfg = to_config(self.values)
-            self.status.showMessage("Optimizing length…")
+            self.status.showMessage(t(L, "running_analysis"))
             QApplication.processEvents()
             res = optimize_length(cfg, L_bounds=(sp_lmin.value(), sp_lmax.value()),
                                   popsize=sp_pop.value(), maxiter=sp_iter.value())
             best_L = res["best_L"]
             lines = [
-                "=== Length Optimization ===",
+                t(L, "ui_opt_header"),
                 f"Best L: {best_L:.2f} m",
                 f"Success: {res['success']}",
                 f"Message: {res['message']}",
                 f"Evaluations: {res['nfev']}",
             ]
             self.results.setPlainText("\n".join(lines))
-            self.status.showMessage(f"Best L = {best_L:.2f} m")
+            self.status.showMessage(t(L, "ui_best_l", L=best_L))
             self.values["L"] = best_L
         except Exception as e:
             QMessageBox.critical(self, "Optimization error", str(e))
@@ -368,8 +530,10 @@ class PileWindow(QMainWindow):
     def new_project(self):
         self.values = defaults(self.lang)
         self.last_result = None
+        self.last_study = None
+        self.last_socket = None
         self.results.clear()
-        self.status.showMessage("New project")
+        self.status.showMessage(t(self.lang, "ui_new_project"))
 
     def toggle_language(self):
         self.set_language("tr" if self.lang == "en" else "en")
@@ -385,22 +549,16 @@ class PileWindow(QMainWindow):
 
     def show_help(self):
         QMessageBox.information(
-            self, "Help",
-            f"{APP_NAME} {__version__}\n\n"
-            "1. Enter soil profile and pile data via Data Entry\n"
-            "2. Analyse\n"
-            "3. View results and plots, or open Interpret\n"
-            "4. Optimize L for shortest safe length\n\n"
-            "CLI: python main.py analyze|optimize-length ..."
-        )
+            self, t(self.lang, "ui_help"),
+            t(self.lang, "ui_help_text", app=APP_NAME, version=__version__))
 
     def open_interpret(self):
         if self.interpret is None or not self.interpret.isVisible():
-            self.interpret = InterpretWindow(self)
-        if hasattr(self, "last_result"):
+            self.interpret = InterpretWindow(self, self.lang)
+        if hasattr(self, "last_result") and self.last_result is not None:
             self.interpret.set_analysis(self.last_result, self.lang)
         else:
-            self.interpret.summary.setPlainText("Run an analysis first.")
+            self.interpret.summary.setPlainText(t(self.lang, "ui_no_analysis"))
         self.interpret.show()
         self.interpret.raise_()
         self.interpret.activateWindow()
@@ -411,11 +569,10 @@ class PileWindow(QMainWindow):
         self._dark = not self._dark
         if self._dark:
             self.setStyleSheet(DARK_STYLE)
-            self.act_dark.setText("Light")
         else:
             self.setStyleSheet(MODERN_STYLE)
-            self.act_dark.setText("Dark")
-        self.status.showMessage("Dark mode" if self._dark else "Light mode")
+        self.act_dark.setText(t(self.lang, "ui_light_mode" if self._dark else "ui_dark_mode"))
+        self.status.showMessage(t(self.lang, "ui_dark_mode" if self._dark else "ui_light_mode"))
 
     def open_project(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open", "", "JSON (*.json)")
@@ -430,7 +587,9 @@ class PileWindow(QMainWindow):
             else:
                 self.values = data
             self.last_result = None
-            self.status.showMessage(f"Opened {path}")
+            self.last_study = None
+            self.last_socket = None
+            self.status.showMessage(t(self.lang, "ui_opened", path=path))
         except Exception as e:
             QMessageBox.critical(self, "Open error", str(e))
 
@@ -440,7 +599,7 @@ class PileWindow(QMainWindow):
             return
         try:
             Path(path).write_text(json.dumps(project_file(self.values), indent=2, ensure_ascii=False), encoding="utf-8")
-            self.status.showMessage(f"Saved {path}")
+            self.status.showMessage(t(self.lang, "ui_saved", path=path))
         except Exception as e:
             QMessageBox.critical(self, "Save error", str(e))
 
