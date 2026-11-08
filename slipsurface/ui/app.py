@@ -333,6 +333,11 @@ class PileWindow(QMainWindow):
             return
         self.values["pile_type"] = pile_type
         self.values["title"] = default_title(pile_type, self.values.get("title", ""))
+        # A bored and a driven pile give different answers for the same soil:
+        # the analysis and study of the previous type no longer apply. (The
+        # socket's inputs did not change, so its result still stands.)
+        self.last_result = None
+        self.last_study = None
         self._set_dirty()
         self._sync_pile_type()
         self.status.showMessage(t(self.lang, "ui_pile_type_changed",
@@ -589,11 +594,11 @@ class PileWindow(QMainWindow):
             new_values = dlg.collect()
             if new_values != self.values:
                 self._set_dirty()
-            self.values = new_values
-            # The inputs changed: earlier results no longer describe them.
-            self.last_result = None
-            self.last_socket = None
-            self.last_study = None
+                self.values = new_values
+                # The inputs changed: earlier results no longer describe them.
+                self.last_result = None
+                self.last_socket = None
+                self.last_study = None
             self._sync_pile_type()
             self.status.showMessage(t(self.lang, "ui_data_updated"))
 
@@ -677,14 +682,16 @@ class PileWindow(QMainWindow):
     def run_socket(self):
         L = self.lang
         if self.pile_type != "socket":
-            return
+            return False
         try:
             self.last_socket = analyse_socket(to_config(self.values))
-            self._fill_plot_combo()
-            self._show_current_results()
-            self.status.showMessage(t(L, "socket_complete"))
         except Exception as e:
             error_box(self, t(L, "ui_analysis_error"), e, L)
+            return False
+        self._fill_plot_combo()
+        self._show_current_results()
+        self.status.showMessage(t(L, "socket_complete"))
+        return True
 
     def _update_plot(self, *_):
         if not HAS_MPL:
@@ -816,14 +823,18 @@ class PileWindow(QMainWindow):
         form.addRow(buttons)
         if dlg.exec() != QDialog.Accepted:
             return
+        bounds = (sp_lmin.value(), sp_lmax.value())
+        if bounds[0] >= bounds[1]:
+            QMessageBox.warning(self, t(L, "ui_opt_title"), t(L, "ui_bounds_invalid"))
+            return
+        options = dict(popsize=sp_pop.value(), maxiter=sp_iter.value())
         try:
             cfg = to_config(self.values)
             ok, res = run_task(
                 self, t(L, "ui_opt_title"), t(L, "ui_opt_running"),
                 lambda progress, cancelled: optimize_length(
-                    cfg, L_bounds=(sp_lmin.value(), sp_lmax.value()),
-                    popsize=sp_pop.value(), maxiter=sp_iter.value(),
-                    progress=progress, is_cancelled=cancelled),
+                    cfg, L_bounds=bounds, progress=progress, is_cancelled=cancelled,
+                    **options),
                 t(L, "ui_cancel"), delay_ms=0)
             if not ok:
                 if isinstance(res, (Cancelled, OptCancelled)):
@@ -834,8 +845,13 @@ class PileWindow(QMainWindow):
             # Rounded up, so the length written back is never shorter than the safe one
             self.values["L"] = math.ceil(best_L * 100.0 - 1e-6) / 100.0
             self._set_dirty()
+            # The study was run on the old length; it no longer applies.
+            self.last_study = None
             # Show the design at the optimised length, then the optimiser's log.
-            self.run_analysis()
+            if not self.run_analysis():
+                self.last_result = None
+                self._fill_plot_combo()
+                self._show_current_results()
             lines = [
                 t(L, "ui_opt_header"),
                 f"Best L: {best_L:.2f} m",
@@ -897,7 +913,9 @@ class PileWindow(QMainWindow):
         L = self.lang
         if self.pile_type == "socket":
             return
-        if options is None:
+        # a button's clicked(bool) / an action's triggered(bool) arrives here as
+        # options=False: anything but a dict means "ask the user"
+        if not isinstance(options, dict):
             options = self._cost_dialog()
             if options is None:
                 return
@@ -931,7 +949,11 @@ class PileWindow(QMainWindow):
             self.values["L"] = math.ceil(res["best_L"] * 100.0 - 1e-6) / 100.0
             self.values["D"] = math.ceil(res["best_D"] * 1000.0 - 1e-6) / 1000.0
             self._set_dirty()
-            self.run_analysis()
+            self.last_study = None
+            if not self.run_analysis():
+                self.last_result = None
+                self._fill_plot_combo()
+                self._show_current_results()
             self.results.setPlainText("\n".join(lines) + self.results.toPlainText())
             self.status.showMessage(t(L, "ui_best_cost", L=res["best_L"], D=res["best_D"],
                                       cost=res["best_cost"]))
@@ -977,10 +999,15 @@ class PileWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, t(self.lang, "ui_export_plot"),
                                               f"{key}.png",
                                               "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)")
-        if path:
+        if not path:
+            return
+        try:
             self.fig.savefig(path, dpi=200, bbox_inches="tight",
                              facecolor=self.fig.get_facecolor())
-            self.status.showMessage(t(self.lang, "ui_saved", path=path))
+        except Exception as e:
+            error_box(self, t(self.lang, "ui_export_plot"), e, self.lang)
+            return
+        self.status.showMessage(t(self.lang, "ui_saved", path=path))
 
     def show_help(self):
         QMessageBox.information(
@@ -988,7 +1015,8 @@ class PileWindow(QMainWindow):
             t(self.lang, "ui_help_text", app=APP_NAME, version=__version__))
 
     def open_interpret(self):
-        if self.interpret is None or not self.interpret.isVisible():
+        # one window, reused: a closed one is only hidden
+        if self.interpret is None:
             self.interpret = InterpretWindow(self, self.lang)
         self.interpret.set_analysis(self._current_analysis(), self.lang, self.pile_type,
                                     self.theme)

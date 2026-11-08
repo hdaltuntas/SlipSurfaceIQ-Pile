@@ -526,7 +526,7 @@ class DataEntryDialog(QDialog):
                 self._grey_unused(table, cols, table.cellWidget(r, behaviour_col))
 
     def _grey_unused(self, table: QTableWidget, cols: list, cb: QComboBox,
-                     keep_invalid: bool = False):
+                     keep_invalid: bool = True):
         """Greys out the columns that mean nothing for the layer's behaviour."""
         if cb is None:
             return
