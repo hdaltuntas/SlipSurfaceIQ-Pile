@@ -1,4 +1,4 @@
-"""Configurations and project files.
+"""The configuration of an analysis.
 
 The analysis takes one nested configuration dictionary: ``pile``, ``loading``,
 ``group``, ``groundwater``, ``soil_profile``, ``options``, ``settlement``,
@@ -6,11 +6,9 @@ The analysis takes one nested configuration dictionary: ``pile``, ``loading``,
 (see `config.DEFAULT_CONFIG` for every key and its default).
 
     default_config(pile_type)   a complete starter configuration
-    normalize(cfg)              any partial or older configuration made complete
-                                and checked: missing keys take their default,
+    normalize(cfg)              a partial configuration made complete and
+                                checked: missing keys take their default,
                                 unknown choices fall back to the default
-    load_config(path)           a ``.pile.json`` project file, normalized
-    save_config(cfg, path)      writes one
 
 The pile type decides which analysis runs:
 
@@ -25,8 +23,6 @@ The pile type decides which analysis runs:
 from __future__ import annotations
 
 import copy
-import json
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .config import (
@@ -45,17 +41,10 @@ from .config import (
     TIP_METHODS,
 )
 
-#: Name and version written into project files
-FILE_FORMAT = "slipsurface-pile"
-FILE_VERSION = "0.1"
-
 PILE_TYPES = ["bored", "driven", "socket"]
 
 #: How a driven pile can be installed; the first is the default
 DRIVEN_INSTALLATIONS = ["driven_high", "driven_low"]
-
-#: Older project files called the bored pile a "pile in soil"
-_LEGACY_PILE_TYPES = {"soil": "bored"}
 
 #: The project title a new configuration of each type starts with
 DEFAULT_TITLES = {
@@ -82,8 +71,8 @@ SOIL_NUMBERS = ["thickness", "gamma", "gamma_sat", "phi", "cu", "OCR", "N60", "E
 
 
 def pile_type_of(value) -> str:
-    """A pile type from whatever a file carries; unknown is bored."""
-    text = _LEGACY_PILE_TYPES.get(str(value or ""), str(value or ""))
+    """The pile type named by `value`; unknown is bored."""
+    text = str(value or "")
     return text if text in PILE_TYPES else PILE_TYPES[0]
 
 
@@ -136,19 +125,8 @@ def _soil_profile(rows) -> List[dict]:
     return layers
 
 
-def _pile_type(cfg: dict) -> str:
-    installation = (cfg.get("pile") or {}).get("installation")
-    pile_type = pile_type_of(cfg.get("pile_type"))
-    # Files from before the driven type: a "pile in soil" (or no type at all)
-    # installed by driving is a driven pile.
-    if pile_type == "bored" and installation in DRIVEN_INSTALLATIONS \
-            and cfg.get("pile_type") in (None, "soil"):
-        pile_type = "driven"
-    return pile_type
-
-
 def normalize(cfg: Optional[dict] = None) -> Dict[str, Any]:
-    """A complete, checked configuration from a partial or older one.
+    """A complete, checked configuration from a partial one.
 
     Every section and key of `config.DEFAULT_CONFIG` is present; a missing or
     empty value takes its default, a choice outside its list falls back to
@@ -168,26 +146,10 @@ def normalize(cfg: Optional[dict] = None) -> Dict[str, Any]:
         layer_defaults = DEFAULT_CONFIG["soil_profile"][0]
         out["soil_profile"] = _soil_profile(
             {**layer_defaults, **row} for row in cfg["soil_profile"] if isinstance(row, dict))
-    out["pile_type"] = _pile_type(cfg)
+    out["pile_type"] = pile_type_of(cfg.get("pile_type"))
     if out["pile_type"] == "bored":
         # the installation follows the type: a bored pile is bored
         out["pile"]["installation"] = "bored"
     elif out["pile"]["installation"] not in DRIVEN_INSTALLATIONS:
         out["pile"]["installation"] = DRIVEN_INSTALLATIONS[0]
     return out
-
-
-def load_config(path) -> Dict[str, Any]:
-    """The configuration of a ``.pile.json`` project file, normalized."""
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if isinstance(data, dict) and isinstance(data.get("config"), dict):
-        data = data["config"]
-    if not isinstance(data, dict):
-        raise ValueError(f"{path}: not a project file")
-    return normalize(data)
-
-
-def save_config(cfg: dict, path) -> None:
-    """Writes the configuration as a project file."""
-    data = {"format": FILE_FORMAT, "version": FILE_VERSION, **normalize(cfg)}
-    Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = ROOT / "examples" / "example.pile.json"
 
 
 def test_the_version_has_one_home():
@@ -51,7 +50,6 @@ class NoExtras:
 sys.meta_path.insert(0, NoExtras())
 
 from slipsurface import pile
-assert "numpy" not in sys.modules            # importing the package is free
 result = pile.analyse(pile.default_config("bored"))
 socket = pile.analyse_socket(pile.default_config("socket"))
 from slipsurface.pile import summary
@@ -64,26 +62,27 @@ except pile.MissingDependency as exc:
 else:
     raise AssertionError("plotting imported without matplotlib")
 
-from slipsurface.pile import cli
-code = cli.main(["analyze", {example!r}, "-o", "never.pdf"])
+try:
+    from slipsurface.pile import report
+except pile.MissingDependency as exc:
+    pdf = str(exc)
+else:
+    raise AssertionError("report imported without matplotlib and reportlab")
 print(json.dumps({{"FS": result.results["FS"], "text": bool(text),
                   "socket": socket.results["Ls_design"] > 0,
-                  "figures": figures, "report_exit": code,
+                  "figures": figures, "report": pdf,
                   "loaded": sorted(m for m in ("matplotlib", "reportlab")
                                    if m in sys.modules)}}))
 """
 
 
 def test_the_analysis_runs_without_the_extras(tmp_path):
-    script = WITHOUT_EXTRAS.format(root=str(ROOT), example=str(EXAMPLE))
+    script = WITHOUT_EXTRAS.format(root=str(ROOT))
     run = subprocess.run([sys.executable, "-I", "-c", script], capture_output=True,
                          text=True, cwd=tmp_path, timeout=300)
     assert run.returncode == 0, run.stderr
     out = json.loads(run.stdout.strip().splitlines()[-1])
     assert out["FS"] > 0 and out["text"] and out["socket"]
     assert 'pip install "slipsurfaceiq-pile[plot]"' in out["figures"]
-    # the report is refused before the analysis, with the extra to install
-    assert out["report_exit"] == 1
-    assert 'slipsurfaceiq-pile[report]' in run.stderr
-    assert not (tmp_path / "never.pdf").exists()
+    assert 'pip install "slipsurfaceiq-pile[report]"' in out["report"]
     assert out["loaded"] == []

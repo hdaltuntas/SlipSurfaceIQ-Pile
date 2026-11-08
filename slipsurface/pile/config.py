@@ -1,19 +1,19 @@
 """
 Configuration for SlipSurface IQ Pile: the default project, the choice lists, and the
-themes and palette of the figures.
+style and palette of the figures.
 
 The app name and version live in the package's ``__init__`` so that there is
-one copy of each; the translations live in `slipsurface.pile.i18n`.
+one copy of each; the texts live in `slipsurface.pile.texts`.
 """
 
 from . import APP_NAME
 from . import __version__ as APP_VERSION
 
-__all__ = ["APP_NAME", "APP_VERSION", "DEFAULT_CONFIG", "THEMES", "PLOT_PALETTE",
+__all__ = ["APP_NAME", "APP_VERSION", "DEFAULT_CONFIG", "THEME", "PLOT_PALETTE",
            "SOIL_FILL", "METHOD_COLORS", "SHAPES", "INSTALLATIONS", "BEHAVIOURS",
            "CLAY_METHODS", "TIP_METHODS", "EFFICIENCY_METHODS", "GROUP_SETTLEMENT",
            "SKIN_DISTRIBUTIONS", "SOCKET_SIDE_METHODS", "SOCKET_BASE_METHODS",
-           "SOCKET_DESIGN", "SOCKET_BASE_DESIGN", "MODULUS_METHODS", "OVERBURDEN_FRICTION", "ACCENT", "PA"]
+           "SOCKET_DESIGN", "SOCKET_BASE_DESIGN", "MODULUS_METHODS", "OVERBURDEN_FRICTION", "PA"]
 
 #: Atmospheric pressure, the reference stress of the normalised correlations [kPa]
 PA = 101.325
@@ -67,19 +67,10 @@ OVERBURDEN_FRICTION = ["none", "soil"]
 # A rock socket is never shorter than this many pile diameters.
 MIN_SOCKET_RATIO = 3.0
 
-# --- Figure themes and palette ---------------------------------------------
-ACCENT = "#5B7A3A"  # the colour of its group in the suite (foundations)
-
-THEMES = {
-    "dark": dict(bg="#1f2937", panel="#111827", input_bg="#111827", fg="#F9FAFB",
-                 fg_dim="#9CA3AF", border="#374151", hover="#374151", btn="#374151",
-                 muted="#6B7280", accent="#9BBA78", accent_hover="#AECB8D"),
-    "light": dict(bg="#FFFFFF", panel="#FAF9F5", input_bg="#FFFFFF", fg="#141413",
-                  fg_dim="#73726C", border="#E3E0D5", hover="#F0EEE6", btn="#F0EEE6",
-                  muted="#B7B4AA", accent=ACCENT, accent_hover="#4A6630"),
-}
-# The report's figures: the light palette on white paper.
-THEMES["paper"] = dict(THEMES["light"], bg="#FFFFFF", panel="#FFFFFF")
+# --- Figure style and palette ----------------------------------------------
+#: The colours of the figures: dark ink on white
+THEME = dict(bg="#FFFFFF", panel="#FFFFFF", fg="#141413", fg_dim="#73726C",
+             border="#E3E0D5", accent="#5B7A3A")
 
 # Semantic colours: the same quantity is the same colour in every figure. Warm
 # and muted, to sit on the paper-coloured page; terracotta marks the capacity.
@@ -101,13 +92,8 @@ METHOD_COLORS = {
     "raft": "#8C6BB1", "vesic_group": "#5E8C4A", "meyerhof_spt": "#73726C",
 }
 
-# Fill colours of the soil behaviours in the section (theme-dependent, since a
-# light sandy tone reads poorly on a dark background).
-SOIL_FILL = {
-    "light": {"granular": "#E3C98F", "cohesive": "#A7B8A0", "rock": "#B9B3A8"},
-    "dark": {"granular": "#8A7250", "cohesive": "#5E6E58", "rock": "#6E6A62"},
-}
-SOIL_FILL["paper"] = SOIL_FILL["light"]
+#: Fill colours of the soil behaviours in the section
+SOIL_FILL = {"granular": "#E3C98F", "cohesive": "#A7B8A0", "rock": "#B9B3A8"}
 
 DEFAULT_CONFIG = {
     "project_info": {

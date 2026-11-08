@@ -39,9 +39,6 @@ plot = ["matplotlib>=3.7"]
 report = ["matplotlib>=3.7", "reportlab>=4.0"]
 all = ["slipsurfaceiq-pile[plot,report]"]
 
-[project.scripts]
-slipsurface-pile = "slipsurface.pile.cli:main"
-
 [project.urls]
 Homepage = "https://github.com/hdaltuntas/SlipSurfaceIQ-Pile"
 Source = "https://github.com/hdaltuntas/SlipSurfaceIQ-Pile"

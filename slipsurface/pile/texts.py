@@ -1,14 +1,14 @@
 """
 Every text of SlipSurface IQ Pile, in English.
 
-`ENTRIES[key]` is how the rest of the program reads them; `t(key, **params)`
+`TEXTS[key]` is how the rest of the program reads them; `text(key, **params)`
 formats one with its parameters.
 """
 
 
 from __future__ import annotations
 
-ENTRIES = {
+TEXTS = {
     'err_dimensions': 'The pile diameter and length must be greater than zero.',
     'err_top': 'The depth of the pile head cannot be negative.',
     'err_material': 'The unit weight and the modulus of the pile must be greater than zero.',
@@ -240,14 +240,13 @@ ENTRIES = {
     'plot_pile_force': 'Pile load',
 }
 
-TRANSLATIONS = {"en": dict(ENTRIES)}
-
-def t(lang: str, key: str, **params) -> str:
+def text(key: str, **params) -> str:
     """One text, formatted; the key itself if it is unknown."""
-    text = ENTRIES.get(key, key)
-    return text.format(**params) if params else text
+    value = TEXTS.get(key, key)
+    return value.format(**params) if params else value
 
-def warning_text(lang: str, warning) -> str:
+
+def warning_text(warning) -> str:
     """An engine warning, (key, params), as a sentence."""
     key, params = warning
-    return t(lang, key, **params)
+    return text(key, **params)

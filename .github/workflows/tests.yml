@@ -27,10 +27,6 @@ jobs:
         run: ruff check --select E9,F63,F7,F82 .
       - name: Tests
         run: python -m pytest -q
-      - name: Command line
-        run: |
-          slipsurface-pile --check
-          slipsurface-pile analyze examples/example.pile.json
 
   package:
     # The wheel as PyPI will get it, installed without and with the extras
@@ -50,15 +46,27 @@ jobs:
           python -m venv /tmp/core
           /tmp/core/bin/pip install dist/*.whl
           cd /tmp
-          /tmp/core/bin/slipsurface-pile --check
-          /tmp/core/bin/slipsurface-pile analyze "$GITHUB_WORKSPACE/examples/example.pile.json" --json
-          if /tmp/core/bin/slipsurface-pile analyze "$GITHUB_WORKSPACE/examples/example.pile.json" -o r.pdf; then
-            echo "the report must ask for the [report] extra"; exit 1
-          fi
+          /tmp/core/bin/python -c '
+          from slipsurface import pile
+          from slipsurface.pile import summary
+          for kind in ("bored", "driven"):
+              print(summary.headline(pile.analyse(pile.default_config(kind))))
+          print(summary.socket_headline(pile.analyse_socket(pile.default_config("socket"))))
+          try:
+              from slipsurface.pile import report
+          except pile.MissingDependency as exc:
+              print(exc)
+          else:
+              raise SystemExit("the report must ask for the [report] extra")
+          '
       - name: Install with all extras
         run: |
           python -m venv /tmp/all
           /tmp/all/bin/pip install "$(ls dist/*.whl)[all]"
           cd /tmp
-          /tmp/all/bin/slipsurface-pile analyze "$GITHUB_WORKSPACE/examples/example.pile.json" -o r.pdf
+          /tmp/all/bin/python -c '
+          from slipsurface import pile
+          from slipsurface.pile import report
+          report.export_report("r.pdf", pile.analyse(pile.default_config()))
+          '
           test "$(head -c 5 r.pdf)" = "%PDF-"

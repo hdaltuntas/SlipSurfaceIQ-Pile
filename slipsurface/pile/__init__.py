@@ -30,8 +30,8 @@ safe length and diameter.
 
 Package layout
 --------------
-    slipsurface.pile.config        app identity, defaults, themes, palette
-    slipsurface.pile.i18n          every text of the program (English)
+    slipsurface.pile.config        defaults, choice lists, figure colours
+    slipsurface.pile.texts         every text of the program
     slipsurface.pile.profile       the layered soil column and its stresses
     slipsurface.pile.axial         unit shaft friction and base resistance, per method
     slipsurface.pile.group         group efficiency and block failure
@@ -40,11 +40,9 @@ Package layout
     slipsurface.pile.engine        the pile analysis
     slipsurface.pile.optimizer     shortest safe length, cheapest safe length and diameter
     slipsurface.pile.summary       the results as text and headline values
-    slipsurface.pile.project       configurations and project files
+    slipsurface.pile.project       complete starter configurations, checking
     slipsurface.pile.plotting      analysis figures              (extra: plot)
     slipsurface.pile.report        calculation report as PDF     (extra: report)
-
-Command line:  slipsurface-pile [command]   (or  python -m slipsurface.pile [command])
 
 As a library
 ------------
@@ -56,40 +54,21 @@ As a library
     >>> from slipsurface.pile import summary
     >>> print(summary.results_text(result))
 
-or from a project file: `pile.analyse(pile.load_config("my.pile.json"))`. The
-analysis needs only NumPy and SciPy; figures and the PDF report are extras
-(`slipsurfaceiq-pile[plot]`, `[report]`, `[all]`).
+The analysis needs only NumPy and SciPy; figures and the PDF report are
+extras (`slipsurfaceiq-pile[plot]`, `[report]`, `[all]`).
 """
-
-from importlib import import_module
 
 __version__ = "2026.0.0"
 
 APP_NAME = "SlipSurface IQ Pile"
-ORG = "SlipSurface IQ"
 
-#: The library's entry points -> the module that defines them. They load on
-#: first use, so `import slipsurface.pile` stays standard-library only (the
-#: command line checks the dependencies after importing it).
-_API = {
-    "analyse": "engine", "PileAnalysis": "engine",
-    "analyse_socket": "socket", "SocketAnalysis": "socket",
-    "default_config": "project", "normalize": "project", "load_config": "project",
-    "save_config": "project",
-    "optimize_length": "optimizer", "optimize_cost": "optimizer",
-    "PileError": "errors", "MissingDependency": "_optional",
-}
+from ._optional import MissingDependency  # noqa: E402
+from .engine import PileAnalysis, analyse  # noqa: E402
+from .errors import PileError  # noqa: E402
+from .optimizer import optimize_cost, optimize_length  # noqa: E402
+from .project import default_config, normalize  # noqa: E402
+from .socket import SocketAnalysis, analyse_socket  # noqa: E402
 
-__all__ = ["__version__", "APP_NAME", "ORG", *_API]
-
-
-def __getattr__(name: str):
-    if name in _API:
-        value = getattr(import_module(f".{_API[name]}", __name__), name)
-        globals()[name] = value
-        return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-def __dir__():
-    return sorted(set(globals()) | set(_API))
+__all__ = ["__version__", "APP_NAME", "analyse", "PileAnalysis", "analyse_socket",
+           "SocketAnalysis", "default_config", "normalize", "optimize_length",
+           "optimize_cost", "PileError", "MissingDependency"]

@@ -27,13 +27,8 @@ class MissingDependency(ImportError):
     """An optional dependency of the feature asked for is not installed."""
 
 
-def install_hint(extra: str | None = None) -> str:
-    """The pip command that installs the package, with `extra` if given."""
-    return f'pip install "{DISTRIBUTION}[{extra}]"' if extra else f"pip install {DISTRIBUTION}"
-
-
 def missing(module: str, extra: str) -> MissingDependency:
     """The error to raise when `module`, brought by `extra`, cannot be imported."""
     return MissingDependency(
         f"{module} is needed for {EXTRAS[extra][0]} but is not installed. "
-        f"Install it with:  {install_hint(extra)}", name=module)
+        f'Install it with:  pip install "{DISTRIBUTION}[{extra}]"', name=module)

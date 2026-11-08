@@ -47,7 +47,7 @@ from .config import (
     SOIL_FILL,
     TIP_METHODS,
 )
-from .i18n import TRANSLATIONS
+from .texts import TEXTS
 from .plot_style import TITLE_FONT, label_box, style_axis, style_figure
 from .settlement import raft_widening
 
@@ -97,17 +97,11 @@ def _empty(fig, th, text):
 
 
 class _Base:
-    def __init__(self, analysis, lang: str = "en", theme="light", titles: bool = True):
+    def __init__(self, analysis, titles: bool = True):
         self.a = analysis
         self.res = analysis.results
-        self.lang = lang
-        self.L = TRANSLATIONS.get(lang, TRANSLATIONS["en"])
-        self.theme = theme
+        self.L = TEXTS
         self.titles = titles
-
-    def _fills(self):
-        name = self.theme if isinstance(self.theme, str) else "light"
-        return SOIL_FILL.get(name, SOIL_FILL["light"])
 
     def _title(self, fig, th, key: str, extra: str = "") -> None:
         if not self.titles:
@@ -131,7 +125,7 @@ class Plotter(_Base):
 
     # ------------------------------------------------------------------ section
     def _draw_section(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         ax = fig.add_subplot(111)
         style_axis(ax, th, grid=False)
         a, res = self.a, self.res
@@ -141,7 +135,7 @@ class Plotter(_Base):
         half = max(span / 2.0 + 2.5 * D + 0.35 * tip, 0.45 * tip, 3.0)
         bottom = min(max(tip + max(3.0 * D, 0.25 * tip), tip + 1.0), a.profile.depth)
 
-        fills = self._fills()
+        fills = SOIL_FILL
         for layer in a.profile.layers:
             if layer["top"] >= bottom:
                 break
@@ -220,7 +214,7 @@ class Plotter(_Base):
 
     # ------------------------------------------------------------------ profile
     def _draw_profile(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         a, res = self.a, self.res
         slices = res["shaft"]["slices"]
         tip = res["z_tip"]
@@ -288,7 +282,7 @@ class Plotter(_Base):
 
     # ------------------------------------------------------------------ methods
     def _draw_methods(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         a, res = self.a, self.res
         ax1 = fig.add_subplot(1, 2, 1)
         style_axis(ax1, th, axis="x")
@@ -329,7 +323,7 @@ class Plotter(_Base):
 
     # ------------------------------------------------------------------ length
     def _draw_length(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         a, res = self.a, self.res
         curve = res["length_curve"]
         if not curve:
@@ -372,7 +366,7 @@ class Plotter(_Base):
 
     # ------------------------------------------------------------------ group
     def _draw_group(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         a, res = self.a, self.res
         group = res["group"]
         ax = fig.add_subplot(1, 2, 1)
@@ -431,7 +425,7 @@ class Plotter(_Base):
 
     # ------------------------------------------------------------------ settlement
     def _draw_settlement(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         a, res = self.a, self.res
         st = res["settlement"]
         raft = st["raft"]
@@ -491,7 +485,7 @@ class Plotter(_Base):
 
     # ------------------------------------------------------------------ seismic
     def _draw_seismic(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         a, res = self.a, self.res
         seismic = res.get("seismic")
         if not seismic:
@@ -587,7 +581,7 @@ class SocketPlotter(_Base):
         return self.L.get(f"side_{key}", key)
 
     def _draw_socket_section(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         ax = fig.add_subplot(111)
         style_axis(ax, th, grid=False)
         s, res = self.a, self.res
@@ -597,7 +591,7 @@ class SocketPlotter(_Base):
         deepest = s.rock_depth + max(Ls, Ls_design if math.isfinite(Ls_design) else 0.0)
         bottom = max(tip, deepest) + max(2.0 * D, 0.25 * tip, 1.0)
         half = max(0.45 * bottom, 3.0 * D)
-        fills = self._fills()
+        fills = SOIL_FILL
         layers = res.get("overburden_layers") or []
         if layers:
             # the soil profile above the rock, when its friction is counted
@@ -720,7 +714,7 @@ class SocketPlotter(_Base):
         ax.invert_yaxis()
 
     def _draw_socket_side(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         res = self.res
         ax = fig.add_subplot(111)
         style_axis(ax, th, axis="x")
@@ -741,7 +735,7 @@ class SocketPlotter(_Base):
         fig.tight_layout(rect=(0, 0, 1, 0.95))
 
     def _draw_socket_length(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         res = self.res
         ax = fig.add_subplot(111)
         style_axis(ax, th, axis="x")
@@ -767,7 +761,7 @@ class SocketPlotter(_Base):
         fig.tight_layout(rect=(0, 0, 1, 0.95))
 
     def _draw_socket_settlement(self, fig: Figure) -> None:
-        th = style_figure(fig, self.theme)
+        th = style_figure(fig)
         s, res = self.a, self.res
         top = max(res["Ls_check"], res["Ls_design"] if math.isfinite(res["Ls_design"]) else 0.0,
                   3.0 * s.D) * 1.6

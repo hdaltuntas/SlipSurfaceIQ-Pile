@@ -33,152 +33,150 @@ from .config import (
     SOCKET_SIDE_METHODS,
     TIP_METHODS,
 )
-from .i18n import TRANSLATIONS, warning_text
+from .texts import TEXTS as L, warning_text
 from .plotting import PLOT_KEYS, SOCKET_PLOT_KEYS, Plotter, SocketPlotter, available_figures
 from .summary import method_label
 
-TEXTS = {
-    "en": {
-        "title": f"{APP_NAME} — Calculation Report",
-        "date": "Date", "analyst": "Analyst", "software": "Software",
-        "sec_inputs": "Input data", "sec_pile": "Pile, group and load",
-        "sec_soil": "Soil profile", "sec_opts": "Methods, options and criteria",
-        "sec_single": "Capacity of a single pile", "sec_base": "Base resistance",
-        "sec_shaft_layers": "Shaft friction by layer",
-        "sec_shaft_methods": "Shaft friction by method",
-        "sec_capacity": "Ultimate and allowable capacity",
-        "sec_matrix": "Net ultimate capacity, shaft method × base method",
-        "sec_group": "Pile group", "sec_eff": "Group efficiency", "sec_block": "Block failure",
-        "sec_group_cap": "Capacity of the group",
-        "sec_settlement": "Settlement", "sec_single_s": "Single pile (Vesić)",
-        "sec_group_s": "Group", "sec_raft": "Equivalent raft, slice by slice",
-        "sec_checks": "Checks and the required length",
-        "sec_seismic": "Seismic load case", "sec_seismic_loads": "Loads on the piles",
-        "sec_seismic_checks": "Compression and uplift",
-        "V_E": "Vertical load V", "M_B": "Moment M_B (loads varying along B)",
-        "M_L": "Moment M_L (loads varying along L)", "x": "x (m)", "y": "y (m)",
-        "P": "P (kN)", "pile_no": "Pile",
-        "P_max": "Most compressed pile Pmax", "P_min": "Least loaded pile Pmin",
-        "QaE": "Allowable compression Qult,net / FS", "ts": "Tension ratio, sand",
-        "tc": "Tension ratio, clay", "cyclic": "Cyclic reduction ζ",
-        "Qs_t": "Shaft friction in tension Qs,t", "W_t": "Pile weight W",
-        "T_all": "Allowable uplift Qs,t / FS + W", "T": "Largest tension T",
-        "block_up": "Block uplift: shear + weight, allowable",
-        "c_seis_c": "Seismic, compression (FS)", "c_seis_t": "Seismic, uplift (FS on Qs,t)",
-        "c_seis_g": "Seismic, block uplift (FS)",
-        "sec_figs": "Figures", "sec_warn": "Warnings", "sec_notes": "Method notes",
-        "sec_socket": "Rock-socketed pile", "sec_socket_in": "Socket, rock and concrete",
-        "sec_socket_side": "Unit side shear by correlation",
-        "sec_socket_base": "Unit base resistance",
-        "sec_socket_design": "Design, socket length and check",
-        "sec_socket_s": "Elastic settlement", "sec_socket_figs": "Figures",
-        "sec_socket_warn": "Warnings", "sec_socket_notes": "Method notes",
-        "parameter": "Parameter", "value": "Value", "unit": "Unit",
-        "shape": "Shape", "D": "Diameter / side D", "L": "Length L",
-        "top": "Depth of the pile head", "tip": "Depth of the tip",
-        "installation": "Installation", "gamma_p": "Unit weight of the pile γp",
-        "Ep": "Modulus of the pile Ep", "A": "Base area Ab", "p": "Perimeter",
-        "Q": "Load on the group Q", "n": "Number of piles", "Qp": "Load per pile",
-        "sx": "Spacing along B", "sy": "Spacing along L",
-        "zw": "Water table depth", "gw": "Unit weight of water γw",
-        "yes": "yes", "no": "no",
-        "layer": "Layer", "type": "Type", "top_l": "Top", "bottom": "Bottom",
-        "clay_method": "Shaft friction in clay", "tip_method": "Base resistance",
-        "K": "K / K0 in sand", "delta": "δ / φ'", "zc": "Critical depth zc",
-        "weight": "Pile weight subtracted", "buoyant": "Buoyant below the water table",
-        "efficiency": "Group efficiency", "block": "Block failure checked",
-        "gs": "Group settlement for the check", "FS": "Factor of safety",
-        "s_allow": "Allowable settlement",
-        "method": "Method", "factor": "Factor", "qb": "qb (kPa)", "Qb": "Qb (kN)",
-        "depth": "Depth (m)", "Qs": "Qs (kN)", "sv": "σ'v0 at the tip",
-        "Qs_l": "Shaft friction Qs", "Qb_l": "Base resistance Qb", "Qu": "Qult = Qs + Qb",
-        "W": "Pile weight W", "Qn": "Qult,net = Qult − W", "Qa": "Qall = Qult,net / FS",
-        "eta": "η", "Bg": "Width of the block Bg", "Lg": "Length of the block Lg",
-        "block_Qs": "Shaft of the block", "block_Qb": "Base of the block",
-        "block_Q": "Capacity of the block", "Q_eff": "η · n · Qult",
-        "Qg": "Qg,ult", "Qgn": "Qg,ult − n·W", "Qga": "Qg,all", "governs": "Governs",
-        "s1": "Shortening of the pile s1", "s2": "Base load s2", "s3": "Shaft load s3",
-        "s": "Settlement", "z": "z (m)", "h": "h (m)", "s0": "σ'v0 (kPa)",
-        "ds": "Δσ (kPa)", "ds_mm": "s (mm)", "kind": "Model",
-        "raft_z": "Depth of the raft", "raft_q": "Pressure on the raft",
-        "raft_c": "Consolidation", "raft_e": "Elastic compression",
-        "raft_sh": "Shortening of the piles above the raft", "raft_total": "Total",
-        "check": "Check", "actual": "Actual", "allowable": "Allowable", "status": "Status",
-        "c_pile": "Single pile (FS)", "c_group": "Group (FS)", "c_settle": "Settlement (mm)",
-        "ok": "OK", "notok": "NOT OK", "na": "n/a",
-        "socket_D": "Socket diameter D", "socket_Ls": "Socket length checked Ls",
-        "socket_top": "Depth of the pile head", "rock": "Depth of the rock surface",
-        "overburden": "Length through the overburden",
-        "Qs_soil": "Shaft friction in the overburden Qs,soil", "not_counted": "not counted", "socket_Q": "Load Q",
-        "qu": "Intact rock strength qu", "qu_side": "qu for the side shear (≤ f'c)",
-        "RQD": "RQD", "Ei": "Intact modulus Ei", "Em": "Rock mass modulus Em",
-        "ratio": "Em / Ei", "alpha_E": "Joint factor αE", "GSI": "GSI", "mi": "mi",
-        "mb": "mb", "s_hb": "s", "fc": "Concrete strength f'c", "Ec": "Concrete modulus Ec",
-        "correlation": "Correlation", "formula": "fs (MPa)", "fs": "fs (kPa)",
-        "Ls_req": "Ls needed (m)", "Q_all": "Qall at Ls (kN)", "range": "In range",
-        "base_formula": "qb (MPa)", "qb_mpa": "qb (MPa)",
-        "fs_design": "Design side shear", "qb_design": "Design base resistance",
-        "FS_side": "Factor of safety on the side", "FS_base": "Factor of safety on the base",
-        "Ls_need": "Socket length needed", "Ls_min": "Minimum socket length",
-        "Ls_design": "Design socket length",
-        "rw": "Randolph & Wroth, side and base", "rw_side": "Randolph & Wroth, side only",
-        "vesic": "Vesić", "shortening": "Shortening through the overburden",
-        "base_share": "Share carried by the base",
-        "notes": [
-            "The ultimate capacity of a pile is Qult = Qs + Qb: the shaft friction "
-            "integrated down the shaft, Qs = Σ fs·p·Δz, and the base resistance Qb = qb·Ab. "
-            "The pile's weight W = γp·Ab·L, buoyant (γp − γw) below the water table, is "
-            "taken off: Qult,net = Qult − W, and Qall = Qult,net / FS.",
-            "Stresses are effective: σ'v0 = σv0 − u0, u0 hydrostatic below the water "
-            "table. In sand the shaft friction is fs = K·σ'v·tan δ with K = (K/K0)·(1 − sin φ'), "
-            "and σ'v is held constant below the critical depth zc when asked (Meyerhof; "
-            "Vesić).",
-            "In clay: API RP 2A α = 0.5·ψ^-0.5 (ψ ≤ 1) or 0.5·ψ^-0.25, ψ = cu/σ'v; Kulhawy & "
-            "Phoon α = 0.21 + 0.26·pa/cu; Sladen α = C·(σ'v/cu)^0.45; each α ≤ 1 and "
-            "fs = α·cu. The β method fs = (1 − sin φ')·tan φ'·√OCR·σ'v; the λ method "
-            "fs = λ·(σ'v + 2cu), λ from the pile's penetration (Vijayvergiya & Focht).",
-            "The base in sand: Meyerhof qb = σ'v·Nq* ≤ 0.5·pa·Nq*·tan φ'; Vesić "
-            "qb = σ'v·Nq*(Irr), Irr the rigidity index reduced for volume change; Janbu "
-            "qb = σ'v·(tan φ' + √(1 + tan² φ'))²·e^(2η'·tan φ'). In clay qb = Nc*·cu with "
-            "Nc* = 9, Vesić's 4/3·(ln Ir + 1) + π/2 + 1, or Janbu's 2 + 2η'; the overburden "
-            "term is left out, as it is balanced by the pile's own weight.",
-            "The group's capacity is the smaller of η·n·Qult and the capacity of the block "
-            "the group occupies (soil-on-soil shaft, the base resistance over the footprint; "
-            "Skempton's Nc in clay); the piles' weight n·W is then taken off.",
-            "The settlement of one pile is Vesić's s1 + s2 + s3, the working load shared "
-            "between shaft and base in the proportion of their ultimate resistances. The "
-            "group settles as an equivalent raft at 2/3 of the pile length, the load spread "
-            "2 : 1 below it (clays by Cc, Cr, e0 and OCR, the others by their constrained "
-            "modulus), plus the piles' shortening above it; by Vesić's s·√(Bg/D); or by "
-            "Meyerhof's SPT rule in sand.",
-            "The required length is the shortest pile, in steps of the length search, "
-            "that passes the single-pile and the group check — and the seismic checks when "
-            "the earthquake is on — with every other input held as it is.",
-            "Seismic load case: the rigid cap shares V, M_B and M_L among the piles, "
-            "P = V/n + M_B·x/Σx² + M_L·y/Σy². The most compressed pile is checked against "
-            "Qult,net / FS. A pile in tension is resisted by its shaft friction in tension, "
-            "Qs,t = Σ λt·ζ·fs·p·Δz (λt the tension ratio of sand or clay, ζ the cyclic "
-            "reduction), and its own weight W: T ≤ Qs,t / FS + W. When the group as a whole "
-            "is lifted (V < 0) the block is checked too: soil-on-soil shear round its "
-            "outline and the effective weight of the soil and the piles inside it.",
-        ],
-        "socket_notes": [
-            "The side shear is fs·π·D·Ls and the base resistance qb·π·D²/4. The allowable "
-            "capacity is Qs/FSside + Qb/FSbase − W; the socket length is the shortest that "
-            "carries the load, found by bisection, and at least the minimum length.",
-            "qu in the side shear correlations is the weaker of the rock and the concrete. "
-            "The linear rules (Reynolds & Kaderabek, Gupton & Logan, Toh et al.) were "
-            "fitted to weak rock and are left out of the statistics above the weak rock "
-            "limit.",
-            "O'Neill & Reese's αE reduces the side shear of jointed rock through Em/Ei; "
-            "the rock mass modulus comes from RQD (Gardner 1987), from GSI (Hoek & "
-            "Diederichs 2006), or is entered.",
-            "The settlement is Randolph & Wroth's closed form for a compressible pile in an "
-            "elastic medium, with the socket's rock along the shaft and below the base, plus "
-            "the elastic shortening of the pile through the overburden, whose friction is "
-            "ignored.",
-        ],
-    },
+REPORT_TEXTS = {
+    "title": f"{APP_NAME} — Calculation Report",
+    "date": "Date", "analyst": "Analyst", "software": "Software",
+    "sec_inputs": "Input data", "sec_pile": "Pile, group and load",
+    "sec_soil": "Soil profile", "sec_opts": "Methods, options and criteria",
+    "sec_single": "Capacity of a single pile", "sec_base": "Base resistance",
+    "sec_shaft_layers": "Shaft friction by layer",
+    "sec_shaft_methods": "Shaft friction by method",
+    "sec_capacity": "Ultimate and allowable capacity",
+    "sec_matrix": "Net ultimate capacity, shaft method × base method",
+    "sec_group": "Pile group", "sec_eff": "Group efficiency", "sec_block": "Block failure",
+    "sec_group_cap": "Capacity of the group",
+    "sec_settlement": "Settlement", "sec_single_s": "Single pile (Vesić)",
+    "sec_group_s": "Group", "sec_raft": "Equivalent raft, slice by slice",
+    "sec_checks": "Checks and the required length",
+    "sec_seismic": "Seismic load case", "sec_seismic_loads": "Loads on the piles",
+    "sec_seismic_checks": "Compression and uplift",
+    "V_E": "Vertical load V", "M_B": "Moment M_B (loads varying along B)",
+    "M_L": "Moment M_L (loads varying along L)", "x": "x (m)", "y": "y (m)",
+    "P": "P (kN)", "pile_no": "Pile",
+    "P_max": "Most compressed pile Pmax", "P_min": "Least loaded pile Pmin",
+    "QaE": "Allowable compression Qult,net / FS", "ts": "Tension ratio, sand",
+    "tc": "Tension ratio, clay", "cyclic": "Cyclic reduction ζ",
+    "Qs_t": "Shaft friction in tension Qs,t", "W_t": "Pile weight W",
+    "T_all": "Allowable uplift Qs,t / FS + W", "T": "Largest tension T",
+    "block_up": "Block uplift: shear + weight, allowable",
+    "c_seis_c": "Seismic, compression (FS)", "c_seis_t": "Seismic, uplift (FS on Qs,t)",
+    "c_seis_g": "Seismic, block uplift (FS)",
+    "sec_figs": "Figures", "sec_warn": "Warnings", "sec_notes": "Method notes",
+    "sec_socket": "Rock-socketed pile", "sec_socket_in": "Socket, rock and concrete",
+    "sec_socket_side": "Unit side shear by correlation",
+    "sec_socket_base": "Unit base resistance",
+    "sec_socket_design": "Design, socket length and check",
+    "sec_socket_s": "Elastic settlement", "sec_socket_figs": "Figures",
+    "sec_socket_warn": "Warnings", "sec_socket_notes": "Method notes",
+    "parameter": "Parameter", "value": "Value", "unit": "Unit",
+    "shape": "Shape", "D": "Diameter / side D", "L": "Length L",
+    "top": "Depth of the pile head", "tip": "Depth of the tip",
+    "installation": "Installation", "gamma_p": "Unit weight of the pile γp",
+    "Ep": "Modulus of the pile Ep", "A": "Base area Ab", "p": "Perimeter",
+    "Q": "Load on the group Q", "n": "Number of piles", "Qp": "Load per pile",
+    "sx": "Spacing along B", "sy": "Spacing along L",
+    "zw": "Water table depth", "gw": "Unit weight of water γw",
+    "yes": "yes", "no": "no",
+    "layer": "Layer", "type": "Type", "top_l": "Top", "bottom": "Bottom",
+    "clay_method": "Shaft friction in clay", "tip_method": "Base resistance",
+    "K": "K / K0 in sand", "delta": "δ / φ'", "zc": "Critical depth zc",
+    "weight": "Pile weight subtracted", "buoyant": "Buoyant below the water table",
+    "efficiency": "Group efficiency", "block": "Block failure checked",
+    "gs": "Group settlement for the check", "FS": "Factor of safety",
+    "s_allow": "Allowable settlement",
+    "method": "Method", "factor": "Factor", "qb": "qb (kPa)", "Qb": "Qb (kN)",
+    "depth": "Depth (m)", "Qs": "Qs (kN)", "sv": "σ'v0 at the tip",
+    "Qs_l": "Shaft friction Qs", "Qb_l": "Base resistance Qb", "Qu": "Qult = Qs + Qb",
+    "W": "Pile weight W", "Qn": "Qult,net = Qult − W", "Qa": "Qall = Qult,net / FS",
+    "eta": "η", "Bg": "Width of the block Bg", "Lg": "Length of the block Lg",
+    "block_Qs": "Shaft of the block", "block_Qb": "Base of the block",
+    "block_Q": "Capacity of the block", "Q_eff": "η · n · Qult",
+    "Qg": "Qg,ult", "Qgn": "Qg,ult − n·W", "Qga": "Qg,all", "governs": "Governs",
+    "s1": "Shortening of the pile s1", "s2": "Base load s2", "s3": "Shaft load s3",
+    "s": "Settlement", "z": "z (m)", "h": "h (m)", "s0": "σ'v0 (kPa)",
+    "ds": "Δσ (kPa)", "ds_mm": "s (mm)", "kind": "Model",
+    "raft_z": "Depth of the raft", "raft_q": "Pressure on the raft",
+    "raft_c": "Consolidation", "raft_e": "Elastic compression",
+    "raft_sh": "Shortening of the piles above the raft", "raft_total": "Total",
+    "check": "Check", "actual": "Actual", "allowable": "Allowable", "status": "Status",
+    "c_pile": "Single pile (FS)", "c_group": "Group (FS)", "c_settle": "Settlement (mm)",
+    "ok": "OK", "notok": "NOT OK", "na": "n/a",
+    "socket_D": "Socket diameter D", "socket_Ls": "Socket length checked Ls",
+    "socket_top": "Depth of the pile head", "rock": "Depth of the rock surface",
+    "overburden": "Length through the overburden",
+    "Qs_soil": "Shaft friction in the overburden Qs,soil", "not_counted": "not counted", "socket_Q": "Load Q",
+    "qu": "Intact rock strength qu", "qu_side": "qu for the side shear (≤ f'c)",
+    "RQD": "RQD", "Ei": "Intact modulus Ei", "Em": "Rock mass modulus Em",
+    "ratio": "Em / Ei", "alpha_E": "Joint factor αE", "GSI": "GSI", "mi": "mi",
+    "mb": "mb", "s_hb": "s", "fc": "Concrete strength f'c", "Ec": "Concrete modulus Ec",
+    "correlation": "Correlation", "formula": "fs (MPa)", "fs": "fs (kPa)",
+    "Ls_req": "Ls needed (m)", "Q_all": "Qall at Ls (kN)", "range": "In range",
+    "base_formula": "qb (MPa)", "qb_mpa": "qb (MPa)",
+    "fs_design": "Design side shear", "qb_design": "Design base resistance",
+    "FS_side": "Factor of safety on the side", "FS_base": "Factor of safety on the base",
+    "Ls_need": "Socket length needed", "Ls_min": "Minimum socket length",
+    "Ls_design": "Design socket length",
+    "rw": "Randolph & Wroth, side and base", "rw_side": "Randolph & Wroth, side only",
+    "vesic": "Vesić", "shortening": "Shortening through the overburden",
+    "base_share": "Share carried by the base",
+    "notes": [
+        "The ultimate capacity of a pile is Qult = Qs + Qb: the shaft friction "
+        "integrated down the shaft, Qs = Σ fs·p·Δz, and the base resistance Qb = qb·Ab. "
+        "The pile's weight W = γp·Ab·L, buoyant (γp − γw) below the water table, is "
+        "taken off: Qult,net = Qult − W, and Qall = Qult,net / FS.",
+        "Stresses are effective: σ'v0 = σv0 − u0, u0 hydrostatic below the water "
+        "table. In sand the shaft friction is fs = K·σ'v·tan δ with K = (K/K0)·(1 − sin φ'), "
+        "and σ'v is held constant below the critical depth zc when asked (Meyerhof; "
+        "Vesić).",
+        "In clay: API RP 2A α = 0.5·ψ^-0.5 (ψ ≤ 1) or 0.5·ψ^-0.25, ψ = cu/σ'v; Kulhawy & "
+        "Phoon α = 0.21 + 0.26·pa/cu; Sladen α = C·(σ'v/cu)^0.45; each α ≤ 1 and "
+        "fs = α·cu. The β method fs = (1 − sin φ')·tan φ'·√OCR·σ'v; the λ method "
+        "fs = λ·(σ'v + 2cu), λ from the pile's penetration (Vijayvergiya & Focht).",
+        "The base in sand: Meyerhof qb = σ'v·Nq* ≤ 0.5·pa·Nq*·tan φ'; Vesić "
+        "qb = σ'v·Nq*(Irr), Irr the rigidity index reduced for volume change; Janbu "
+        "qb = σ'v·(tan φ' + √(1 + tan² φ'))²·e^(2η'·tan φ'). In clay qb = Nc*·cu with "
+        "Nc* = 9, Vesić's 4/3·(ln Ir + 1) + π/2 + 1, or Janbu's 2 + 2η'; the overburden "
+        "term is left out, as it is balanced by the pile's own weight.",
+        "The group's capacity is the smaller of η·n·Qult and the capacity of the block "
+        "the group occupies (soil-on-soil shaft, the base resistance over the footprint; "
+        "Skempton's Nc in clay); the piles' weight n·W is then taken off.",
+        "The settlement of one pile is Vesić's s1 + s2 + s3, the working load shared "
+        "between shaft and base in the proportion of their ultimate resistances. The "
+        "group settles as an equivalent raft at 2/3 of the pile length, the load spread "
+        "2 : 1 below it (clays by Cc, Cr, e0 and OCR, the others by their constrained "
+        "modulus), plus the piles' shortening above it; by Vesić's s·√(Bg/D); or by "
+        "Meyerhof's SPT rule in sand.",
+        "The required length is the shortest pile, in steps of the length search, "
+        "that passes the single-pile and the group check — and the seismic checks when "
+        "the earthquake is on — with every other input held as it is.",
+        "Seismic load case: the rigid cap shares V, M_B and M_L among the piles, "
+        "P = V/n + M_B·x/Σx² + M_L·y/Σy². The most compressed pile is checked against "
+        "Qult,net / FS. A pile in tension is resisted by its shaft friction in tension, "
+        "Qs,t = Σ λt·ζ·fs·p·Δz (λt the tension ratio of sand or clay, ζ the cyclic "
+        "reduction), and its own weight W: T ≤ Qs,t / FS + W. When the group as a whole "
+        "is lifted (V < 0) the block is checked too: soil-on-soil shear round its "
+        "outline and the effective weight of the soil and the piles inside it.",
+    ],
+    "socket_notes": [
+        "The side shear is fs·π·D·Ls and the base resistance qb·π·D²/4. The allowable "
+        "capacity is Qs/FSside + Qb/FSbase − W; the socket length is the shortest that "
+        "carries the load, found by bisection, and at least the minimum length.",
+        "qu in the side shear correlations is the weaker of the rock and the concrete. "
+        "The linear rules (Reynolds & Kaderabek, Gupton & Logan, Toh et al.) were "
+        "fitted to weak rock and are left out of the statistics above the weak rock "
+        "limit.",
+        "O'Neill & Reese's αE reduces the side shear of jointed rock through Em/Ei; "
+        "the rock mass modulus comes from RQD (Gardner 1987), from GSI (Hoek & "
+        "Diederichs 2006), or is entered.",
+        "The settlement is Randolph & Wroth's closed form for a compressible pile in an "
+        "elastic medium, with the socket's rock along the shaft and below the base, plus "
+        "the elastic shortening of the pile through the overburden, whose friction is "
+        "ignored.",
+    ],
 }
 
 #: The interface's palette: warm paper, ink, terracotta; serif headings
@@ -259,13 +257,13 @@ def _png(fig: Figure, dpi: int) -> bytes:
     return buf.getvalue()
 
 
-def render_figures(analysis, lang: str, keys=None, dpi: int = 130) -> Dict[str, bytes]:
+def render_figures(analysis, keys=None, dpi: int = 130) -> Dict[str, bytes]:
     """The report figures of the pile analysis as PNG bytes (off-screen, white, untitled)."""
     if analysis is None:
         return {}
     if keys is None:
         keys = available_figures(analysis)
-    plotter = Plotter(analysis, lang, "paper", titles=False)
+    plotter = Plotter(analysis, titles=False)
     out = {}
     for key in keys:
         fig = Figure(figsize=(10, 7), dpi=dpi)
@@ -274,10 +272,10 @@ def render_figures(analysis, lang: str, keys=None, dpi: int = 130) -> Dict[str, 
     return out
 
 
-def render_socket_figures(socket, lang: str, dpi: int = 130) -> Dict[str, bytes]:
+def render_socket_figures(socket, dpi: int = 130) -> Dict[str, bytes]:
     if socket is None:
         return {}
-    plotter = SocketPlotter(socket, lang, "paper", titles=False)
+    plotter = SocketPlotter(socket, titles=False)
     out = {}
     for key in SOCKET_PLOT_KEYS:
         fig = Figure(figsize=(10, 7), dpi=dpi)
@@ -287,7 +285,7 @@ def render_socket_figures(socket, lang: str, dpi: int = 130) -> Dict[str, bytes]
 
 
 # ----------------------------------------------------------------------
-def _pile_section(T, L, a, figures, img_src, lang, N: _Numbers) -> List[str]:
+def _pile_section(T, L, a, figures, img_src, N: _Numbers) -> List[str]:
     res = a.results
     parts = [N.h2(T["sec_inputs"]), N.h3(T["sec_pile"])]
     rows = [[T["shape"], L["shape_" + a.shape], ""], [T["D"], _f(a.D), "m"],
@@ -484,7 +482,7 @@ def _pile_section(T, L, a, figures, img_src, lang, N: _Numbers) -> List[str]:
 
     if res["warnings"]:
         parts.append(N.h2(T["sec_warn"]) + "<ul>")
-        parts.extend(f"<li>{_esc(warning_text(lang, w))}</li>" for w in res["warnings"])
+        parts.extend(f"<li>{_esc(warning_text(w))}</li>" for w in res["warnings"])
         parts.append("</ul>")
     parts.append(N.h2(T["sec_notes"]) + "<ul class='note'>")
     parts.extend(f"<li>{_esc(n)}</li>" for n in T["notes"])
@@ -492,7 +490,7 @@ def _pile_section(T, L, a, figures, img_src, lang, N: _Numbers) -> List[str]:
     return parts
 
 
-def _socket_section(T, L, s, figures, img_src, lang, N: _Numbers, page_break: bool) -> List[str]:
+def _socket_section(T, L, s, figures, img_src, N: _Numbers, page_break: bool) -> List[str]:
     res = s.results
     parts = [N.h2(T["sec_socket"], page_break=page_break), N.h3(T["sec_socket_in"])]
     m = res["modulus"]
@@ -556,7 +554,7 @@ def _socket_section(T, L, s, figures, img_src, lang, N: _Numbers, page_break: bo
             parts.append(f"<p><img src='{img_src(key)}' width='640'></p>")
     if res["warnings"]:
         parts.append(N.h3(T["sec_socket_warn"]) + "<ul>")
-        parts.extend(f"<li>{_esc(warning_text(lang, w))}</li>" for w in res["warnings"])
+        parts.extend(f"<li>{_esc(warning_text(w))}</li>" for w in res["warnings"])
         parts.append("</ul>")
     parts.append(N.h3(T["sec_socket_notes"]) + "<ul class='note'>")
     parts.extend(f"<li>{_esc(n)}</li>" for n in T["socket_notes"])
@@ -564,7 +562,7 @@ def _socket_section(T, L, s, figures, img_src, lang, N: _Numbers, page_break: bo
     return parts
 
 
-def build_html(analysis, lang: str, figures: Dict[str, bytes], img_src=None,
+def build_html(analysis, figures: Dict[str, bytes], img_src=None,
                socket=None) -> str:
     """
     Builds the report HTML. img_src(key) -> value for the <img src> attribute;
@@ -576,8 +574,7 @@ def build_html(analysis, lang: str, figures: Dict[str, bytes], img_src=None,
     """
     if analysis is None and socket is None:
         raise ValueError("nothing to report")
-    T = TEXTS.get(lang, TEXTS["en"])
-    L = TRANSLATIONS.get(lang, TRANSLATIONS["en"])
+    T = REPORT_TEXTS
     source = analysis if analysis is not None else socket
     info = source.config.get("project_info", {})
     if img_src is None:
@@ -595,9 +592,9 @@ def build_html(analysis, lang: str, figures: Dict[str, bytes], img_src=None,
 
     N = _Numbers()
     if analysis is not None:
-        parts.extend(_pile_section(T, L, analysis, figures, img_src, lang, N))
+        parts.extend(_pile_section(T, L, analysis, figures, img_src, N))
     if socket is not None:
-        parts.extend(_socket_section(T, L, socket, figures, img_src, lang, N,
+        parts.extend(_socket_section(T, L, socket, figures, img_src, N,
                                      page_break=analysis is not None))
     parts.append("</body></html>")
     return "\n".join(parts)
@@ -606,21 +603,21 @@ def build_html(analysis, lang: str, figures: Dict[str, bytes], img_src=None,
 # ----------------------------------------------------------------------
 # exporters
 # ----------------------------------------------------------------------
-def _all_figures(analysis, lang, socket):
-    figures = render_figures(analysis, lang)
-    figures.update(render_socket_figures(socket, lang))
+def _all_figures(analysis, socket):
+    figures = render_figures(analysis)
+    figures.update(render_socket_figures(socket))
     return figures
 
 
-def export_pdf(path: str, analysis, lang: str, socket=None) -> None:
+def export_pdf(path: str, analysis, socket=None) -> None:
     """PDF through reportlab; the figures travel as `fig://<key>` references."""
     from . import pdf as pdf_writer
 
-    T = TEXTS.get(lang, TEXTS["en"])
+    T = REPORT_TEXTS
     source = analysis if analysis is not None else socket
     info = source.config.get("project_info", {})
-    figures = _all_figures(analysis, lang, socket)
-    html_text = build_html(analysis, lang, figures, img_src=lambda k: f"fig://{k}",
+    figures = _all_figures(analysis, socket)
+    html_text = build_html(analysis, figures, img_src=lambda k: f"fig://{k}",
                            socket=socket)
     pdf_writer.html_to_pdf(path, html_text, figures,
                            title=info.get("title", T["title"]),
@@ -628,8 +625,8 @@ def export_pdf(path: str, analysis, lang: str, socket=None) -> None:
                            footer=f"{info.get('title', '')} — {APP_NAME} v{APP_VERSION}")
 
 
-def export_report(path: str, analysis, lang: str, socket=None) -> None:
+def export_report(path: str, analysis, socket=None) -> None:
     """The calculation report, always as PDF; '.pdf' is added when missing."""
     if not path.lower().endswith(".pdf"):
         path = f"{path}.pdf"
-    export_pdf(path, analysis, lang, socket)
+    export_pdf(path, analysis, socket)

@@ -14,11 +14,7 @@ import math
 from typing import List
 
 from .config import CLAY_METHODS, SOCKET_BASE_METHODS, SOCKET_SIDE_METHODS, TIP_METHODS
-from .i18n import TRANSLATIONS, warning_text
-
-def _lang(lang: str) -> dict:
-    return TRANSLATIONS.get(lang, TRANSLATIONS["en"])
-
+from .texts import TEXTS as L, warning_text
 
 def status_text(L: dict, status: str) -> tuple:
     """A check status as (short text, state) — state drives the card colour."""
@@ -45,9 +41,8 @@ def _row(first: str, values, width: int = 28, cell: int = 13) -> str:
 #  Pile
 # --------------------------------------------------------------------------- #
 
-def results_text(analysis, lang: str = "en") -> str:
+def results_text(analysis) -> str:
     """The whole pile analysis as text, in the chosen language."""
-    L = _lang(lang)
     a, res = analysis, analysis.results
     lines = [L["res_title"], "-" * 84]
     lines.append(L["res_pile"].format(shape=L["shape_" + a.shape], D=a.D, L=a.L, top=a.top,
@@ -187,17 +182,16 @@ def results_text(analysis, lang: str = "en") -> str:
 
     if res["warnings"]:
         lines += ["", L["warnings_title"]]
-        lines += ["  • " + warning_text(lang, w) for w in res["warnings"]]
+        lines += ["  • " + warning_text(w) for w in res["warnings"]]
     return "\n".join(lines)
 
 
-def warnings(analysis, lang: str = "en") -> List[str]:
-    return [warning_text(lang, w) for w in analysis.results.get("warnings", [])]
+def warnings(analysis) -> List[str]:
+    return [warning_text(w) for w in analysis.results.get("warnings", [])]
 
 
-def headline(analysis, lang: str = "en") -> str:
+def headline(analysis) -> str:
     """One line for the status bar: the capacity, the checks and the length."""
-    L = _lang(lang)
     res = analysis.results
     status, _ = status_text(L, "OK" if all(c["status"] in ("OK", "N/A")
                                            for c in res["checks"].values()) else "NOT OK")
@@ -211,9 +205,8 @@ def headline(analysis, lang: str = "en") -> str:
 #  Rock socket
 # --------------------------------------------------------------------------- #
 
-def socket_text(socket, lang: str = "en") -> str:
+def socket_text(socket) -> str:
     """The rock socket as text."""
-    L = _lang(lang)
     s, res = socket, socket.results
     lines = [L["sock_title"], "-" * 84]
     lines.append(L["sock_geometry"].format(D=s.D, top=s.top, rock=s.rock_depth,
@@ -272,12 +265,11 @@ def socket_text(socket, lang: str = "en") -> str:
 
     if res["warnings"]:
         lines += ["", L["warnings_title"]]
-        lines += ["  • " + warning_text(lang, w) for w in res["warnings"]]
+        lines += ["  • " + warning_text(w) for w in res["warnings"]]
     return "\n".join(lines)
 
 
-def socket_headline(socket, lang: str = "en") -> str:
-    L = _lang(lang)
+def socket_headline(socket) -> str:
     res = socket.results
     length = res["Ls_design"]
     status, _ = status_text(L, res["check"]["status"])
