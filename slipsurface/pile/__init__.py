@@ -41,6 +41,7 @@ Package layout
     slipsurface.pile.optimizer     shortest safe length, cheapest safe length and diameter
     slipsurface.pile.summary       the results as text and headline values
     slipsurface.pile.project       complete starter configurations, checking
+    slipsurface.pile.spt           the soil profile from SPT records and their tests
     slipsurface.pile.plotting      analysis figures              (extra: plot)
     slipsurface.pile.report        calculation report as PDF     (extra: report)
 
@@ -68,7 +69,9 @@ from .errors import PileError  # noqa: E402
 from .optimizer import optimize_cost, optimize_length  # noqa: E402
 from .project import default_config, normalize  # noqa: E402
 from .socket import SocketAnalysis, analyse_socket  # noqa: E402
+from .spt import SPTProfile, derive_profile  # noqa: E402
 
 __all__ = ["__version__", "APP_NAME", "analyse", "PileAnalysis", "analyse_socket",
            "SocketAnalysis", "default_config", "normalize", "optimize_length",
-           "optimize_cost", "PileError", "MissingDependency"]
+           "optimize_cost", "derive_profile", "SPTProfile", "PileError",
+           "MissingDependency"]

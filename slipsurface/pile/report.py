@@ -562,15 +562,55 @@ def _socket_section(T, L, s, figures, img_src, N: _Numbers, page_break: bool) ->
     return parts
 
 
+def _spt_section(N: _Numbers, spt) -> List[str]:
+    """The SPT records and the layers derived from them, with each value's source."""
+    parts = [N.h2("Soil profile from the boreholes")]
+    zw = "none" if spt.water_depth is None else f"{_f(spt.water_depth)} m"
+    parts.append(f"<p>Water table: {zw}. N60 = N·(ER/60)·CB·CS·CR (Skempton 1986); "
+                 "(N1)60 = CN·N60, CN = √(pa/σ'v0) ≤ 1.7 (Liao &amp; Whitman 1986). "
+                 "Tests in alike, adjacent depth ranges form one layer; laboratory "
+                 "values take precedence over the correlations.</p>")
+    parts.append(N.h3("SPT records"))
+    rows = [[_esc(r["borehole"]), _f(r["depth"]), _f(r["N"], 0), _f(r["N60"], 1),
+             _f(r["N1_60"], 1), _f(r["sigma_eff"], 1), _esc(r["uscs"] or "—"),
+             r["behaviour"], r["layer"]] for r in spt.records]
+    parts.append(_table(["Borehole", "z (m)", "N", "N60", "(N1)60", "σ'v0 (kPa)", "USCS",
+                         "Behaviour", "Layer"], rows, [14, 9, 8, 9, 9, 13, 10, 16, 8]))
+    parts.append(N.h3("Layer parameters and their sources"))
+    labels = {"gamma": "γ / γsat", "phi": "φ'", "cu": "cu", "OCR": "OCR", "N60": "N60",
+              "E": "E", "Cc": "Cc", "Cr": "Cr", "e0": "e0", "nu": "ν"}
+    units = {"gamma": "kN/m³", "phi": "°", "cu": "kPa", "E": "MPa"}
+    top = 0.0
+    for i, (layer, src) in enumerate(zip(spt.layers, spt.sources), start=1):
+        bottom = top + layer["thickness"]
+        parts.append(f"<p><b>Layer {i}: {_esc(layer['name'])}</b>, {_f(top)}–{_f(bottom)} m, "
+                     f"{layer['behaviour']}</p>")
+        rows = []
+        for key, label in labels.items():
+            if key not in src:
+                continue
+            value = f"{_f(layer['gamma'], 1)} / {_f(layer['gamma_sat'], 1)}" \
+                if key == "gamma" else _f(layer[key], 3 if key in ("Cc", "Cr", "e0") else 1)
+            rows.append([label, value, units.get(key, ""), _esc(src[key])])
+        parts.append(_table(["Parameter", "Value", "Unit", "Source"], rows, [16, 16, 10, 58]))
+        top = bottom
+    if spt.warnings:
+        parts.append("<ul class='note'>")
+        parts.extend(f"<li>{_esc(w)}</li>" for w in spt.warnings)
+        parts.append("</ul>")
+    return parts
+
+
 def build_html(analysis, figures: Dict[str, bytes], img_src=None,
-               socket=None) -> str:
+               socket=None, spt=None) -> str:
     """
     Builds the report HTML. img_src(key) -> value for the <img src> attribute;
     the default embeds base64 data URIs (the self-contained HTML file). The PDF
     and DOCX writers pass a `fig://<key>` mapper and resolve the keys against
     the figure dictionary themselves.
 
-    Either the pile analysis or the socket may be missing, not both.
+    Either the pile analysis or the socket may be missing, not both. `spt`, a
+    `spt.SPTProfile`, adds the boreholes and the derivation of the layers.
     """
     if analysis is None and socket is None:
         raise ValueError("nothing to report")
@@ -591,6 +631,8 @@ def build_html(analysis, figures: Dict[str, bytes], img_src=None,
     parts.append(f"<p class='meta'>{meta}</p>")
 
     N = _Numbers()
+    if spt is not None:
+        parts.extend(_spt_section(N, spt))
     if analysis is not None:
         parts.extend(_pile_section(T, L, analysis, figures, img_src, N))
     if socket is not None:
@@ -609,7 +651,7 @@ def _all_figures(analysis, socket):
     return figures
 
 
-def export_pdf(path: str, analysis, socket=None) -> None:
+def export_pdf(path: str, analysis, socket=None, spt=None) -> None:
     """PDF through reportlab; the figures travel as `fig://<key>` references."""
     from . import pdf as pdf_writer
 
@@ -618,15 +660,16 @@ def export_pdf(path: str, analysis, socket=None) -> None:
     info = source.config.get("project_info", {})
     figures = _all_figures(analysis, socket)
     html_text = build_html(analysis, figures, img_src=lambda k: f"fig://{k}",
-                           socket=socket)
+                           socket=socket, spt=spt)
     pdf_writer.html_to_pdf(path, html_text, figures,
                            title=info.get("title", T["title"]),
                            author=info.get("analyst", ""),
                            footer=f"{info.get('title', '')} — {APP_NAME} v{APP_VERSION}")
 
 
-def export_report(path: str, analysis, socket=None) -> None:
-    """The calculation report, always as PDF; '.pdf' is added when missing."""
+def export_report(path: str, analysis, socket=None, spt=None) -> None:
+    """The calculation report, always as PDF; '.pdf' is added when missing.
+    `spt`: the `spt.SPTProfile` the soil profile came from, to report it."""
     if not path.lower().endswith(".pdf"):
         path = f"{path}.pdf"
-    export_pdf(path, analysis, socket)
+    export_pdf(path, analysis, socket, spt)
