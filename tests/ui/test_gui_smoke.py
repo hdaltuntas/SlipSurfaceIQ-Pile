@@ -151,3 +151,52 @@ def test_cost_optimization_writes_back_a_safe_design(window):
         assert 5.0 <= window.values["L"] <= 40.0
         assert 0.4 <= window.values["D"] <= 1.5
         assert window._dirty
+
+
+def test_the_cost_button_asks_for_the_options(window, monkeypatch):
+    # clicked(bool) used to arrive as options=False: no dialog, then **False
+    asked = []
+    monkeypatch.setattr(window, "_cost_dialog", lambda: asked.append(1))
+    window.set_pile_type("bored")
+    window.btn_cost.click()
+    window.act_cost.trigger()
+    assert len(asked) == 2
+
+
+def test_switching_bored_and_driven_drops_the_old_results(window):
+    window.set_pile_type("bored")
+    assert window.run_analysis()
+    window.last_study = object()
+    window.set_pile_type("driven")
+    assert window.last_result is None and window.last_study is None
+    assert window.cards.grid.count() == 0
+
+
+def test_data_entry_ok_without_changes_keeps_the_results(window, monkeypatch):
+    from slipsurface.ui import app as app_mod
+    window.set_pile_type("bored")
+    assert window.run_analysis()
+
+    class Unchanged:
+        def __init__(self, parent, lang, values):
+            self.values = dict(values)
+
+        def exec(self):
+            return app_mod.QDialog.Accepted
+
+        def collect(self):
+            return self.values
+
+    monkeypatch.setattr(app_mod, "DataEntryDialog", Unchanged)
+    window._dirty = False
+    window.open_data_entry()
+    assert window.last_result is not None and not window._dirty
+
+
+def test_the_interpret_window_is_reused(window):
+    window.open_interpret()
+    first = window.interpret
+    first.close()
+    window.open_interpret()
+    assert window.interpret is first
+    first.close()
