@@ -594,7 +594,7 @@ class PileAnalysis:
     # ------------------------------------------------------------------ the run
     def run(self, with_length: bool = True) -> Dict[str, Any]:
         """The whole analysis. `with_length` off leaves the length search out,
-        which is how a study runs its samples."""
+        which is what the optimizer's trial designs need."""
         ev = self.evaluate(self.L)
         self._check_inputs(ev)
         settlement = self._settlement(ev)

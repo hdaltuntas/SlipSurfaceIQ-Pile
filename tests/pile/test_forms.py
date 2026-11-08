@@ -28,7 +28,6 @@ def test_a_project_file_round_trips():
     values.update(D=1.2, shape="square", nx=4, clay_method="beta", tip_method="janbu",
                   socket_Ls=5.5, design="carter_kulhawy", base_design="none",
                   critical_depth=False)
-    values["study_variables"] = [{"path": "loading.Q", "mode": "range", "min": 1, "max": 2}]
     back = forms.from_config(forms.project_file(values))
     for key, value in values.items():
         assert back[key] == value, key
@@ -79,17 +78,3 @@ def test_every_condition_names_a_field_that_exists():
             for item in [group] + group["fields"]:
                 for condition in item.get("when", []):
                     assert condition["key"] in keys, condition
-
-
-def test_the_study_may_vary_every_layer_and_the_load():
-    choices = forms.variable_choices(forms.defaults())
-    paths = {choice["value"] for choice in choices}
-    assert "loading.Q" in paths and "pile.L" in paths and "group.sx" in paths
-    assert "soil_profile.1.cu" in paths
-    assert all(isinstance(choice["base"], float) for choice in choices)
-
-
-def test_a_single_pile_offers_no_spacing():
-    values = {**forms.defaults(), "nx": 1, "ny": 1}
-    paths = {choice["value"] for choice in forms.variable_choices(values)}
-    assert "group.sx" not in paths and "group.sy" not in paths

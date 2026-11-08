@@ -4,9 +4,9 @@ Calculation report for SlipSurface IQ Pile.
 The report is assembled as HTML (the inputs, the base and shaft resistance of
 every method, the pile's weight, the capacity, the group, the settlement, the
 checks and the required length, the figures, the warnings and the method
-notes; the rock socket if one was analysed; the study if one was run) and
-typeset as a PDF through reportlab (see `slipsurface.common.pdf`). The HTML is
-only the intermediate form the PDF is built from; it is not exported.
+notes; the rock socket if one was analysed) and
+typeset as a PDF through reportlab (see `slipsurface.pile.common.pdf`). The
+HTML is only the intermediate form the PDF is built from; it is not exported.
 """
 
 from __future__ import annotations
@@ -18,9 +18,13 @@ import io
 import math
 from typing import Any, Dict, List, Optional
 
-from matplotlib.figure import Figure
+from ._optional import missing
 
-from . import study_plots
+try:
+    from matplotlib.figure import Figure
+except ImportError as exc:
+    raise missing("matplotlib", "report") from exc
+
 from .config import (
     APP_NAME,
     APP_VERSION,
@@ -31,7 +35,6 @@ from .config import (
 )
 from .i18n import TRANSLATIONS, warning_text
 from .plotting import PLOT_KEYS, SOCKET_PLOT_KEYS, Plotter, SocketPlotter, available_figures
-from .study import OUTPUTS
 from .summary import method_label
 
 TEXTS = {
@@ -121,16 +124,6 @@ TEXTS = {
         "rw": "Randolph & Wroth, side and base", "rw_side": "Randolph & Wroth, side only",
         "vesic": "Vesić", "shortening": "Shortening through the overburden",
         "base_share": "Share carried by the base",
-        "sec_study": "Parametric / reliability study", "sec_study_vars": "Variables",
-        "sec_study_stats": "Statistics of the outputs",
-        "sec_study_rel": "Probability of failure",
-        "sec_study_sens": "Sensitivities (Spearman ρ)", "sec_study_figs": "Figures",
-        "study_method": "Sampling method", "study_n": "Samples",
-        "study_ok": "Successful analyses", "variable": "Variable", "mode": "Mode",
-        "range_mode": "Range", "dist": "Distribution", "mean": "Mean", "cov": "CoV",
-        "min": "Min", "max": "Max", "output": "Output", "std": "Std",
-        "criterion": "Criterion", "n_fail": "Failed", "pf": "P", "pf_ci": "95 % CI",
-        "beta_idx": "β",
         "notes": [
             "The ultimate capacity of a pile is Qult = Qs + Qb: the shaft friction "
             "integrated down the shaft, Qs = Σ fs·p·Δz, and the base resistance Qb = qb·Ab. "
@@ -290,19 +283,6 @@ def render_socket_figures(socket, lang: str, dpi: int = 130) -> Dict[str, bytes]
         fig = Figure(figsize=(10, 7), dpi=dpi)
         plotter.draw(key, fig)
         out[key] = _png(fig, dpi)
-    return out
-
-
-def render_study_figures(study, lang: str, dpi: int = 110) -> Dict[str, bytes]:
-    """Study figures keyed 'study_<view>' (only the views that apply)."""
-    if study is None or not study.rows:
-        return {}
-    L = TRANSLATIONS.get(lang, TRANSLATIONS["en"])
-    out = {}
-    for view in study_plots.views(study):
-        fig = Figure(figsize=(10, 7), dpi=dpi)
-        study_plots.draw(view, fig, study, L, "FS", theme="paper")
-        out[f"study_{view}"] = _png(fig, dpi)
     return out
 
 
@@ -584,55 +564,8 @@ def _socket_section(T, L, s, figures, img_src, lang, N: _Numbers, page_break: bo
     return parts
 
 
-def _study_section(T, L, study, figures, img_src, N: _Numbers) -> List[str]:
-    parts = [N.h2(T["sec_study"], page_break=True)]
-    s = study.summary
-    parts.append(_kv_table(T, [
-        [T["study_method"], L[f"sampling_{study.method}"], ""],
-        [T["study_n"], str(s.get("n_total", 0)), ""],
-        [T["study_ok"], str(s.get("n_ok", 0)), ""],
-    ]))
-    parts.append(N.h3(T["sec_study_vars"]))
-    rows = []
-    for v in study.variables:
-        if v.mode == "range":
-            rows.append([_esc(v.label), T["range_mode"], _f(v.vmin, 3), _f(v.vmax, 3), "—", "—",
-                         "—", v.n_points])
-        else:
-            rows.append([_esc(v.label), T["dist"], "—", "—", L[f"dist_{v.dist}"],
-                         _f(v.mean, 3), _f(v.cov, 3), "—"])
-    parts.append(_table([T["variable"], T["mode"], T["min"], T["max"], T["dist"], T["mean"],
-                         T["cov"], "n"], rows, [28, 12, 10, 10, 14, 10, 8, 8]))
-    parts.append(N.h3(T["sec_study_stats"]))
-    rows = [[_esc(L.get(f"out_{k}", k)), st["n"], _f(st["mean"], 3), _f(st["std"], 3),
-             _f(st["p5"], 3), _f(st["p50"], 3), _f(st["p95"], 3)]
-            for k, _ in OUTPUTS if k in s.get("stats", {}) for st in [s["stats"][k]]]
-    parts.append(_table([T["output"], "n", T["mean"], T["std"], "P5", "P50", "P95"],
-                        rows, [34, 8, 12, 12, 11, 11, 12]))
-    if s.get("reliability"):
-        parts.append(N.h3(T["sec_study_rel"]))
-        rows = []
-        for name, r in s["reliability"].items():
-            rows.append([_esc(L.get(name, name)), r["n"], r["n_fail"], f"{r['pf']:.3g}",
-                         f"[{r['pf_lo']:.2g}, {r['pf_hi']:.2g}]",
-                         _esc(study_plots._beta_text(r["beta"], r["n"]))])
-        parts.append(_table([T["criterion"], "n", T["n_fail"], T["pf"], T["pf_ci"],
-                             T["beta_idx"]], rows, [30, 10, 12, 14, 20, 14]))
-    if s.get("spearman"):
-        parts.append(N.h3(T["sec_study_sens"]))
-        outs = [k for k, _ in OUTPUTS if k in s["spearman"]]
-        rows = [[_esc(v.label)] + [f"{s['spearman'][k].get(v.path, float('nan')):+.2f}"
-                                   for k in outs] for v in study.variables]
-        parts.append(_table([T["variable"]] + [L.get(f"out_{k}", k) for k in outs], rows))
-    parts.append(N.h3(T["sec_study_figs"]))
-    for key in figures:
-        if key.startswith("study_"):
-            parts.append(f"<p><img src='{img_src(key)}' width='640'></p>")
-    return parts
-
-
 def build_html(analysis, lang: str, figures: Dict[str, bytes], img_src=None,
-               study=None, socket=None) -> str:
+               socket=None) -> str:
     """
     Builds the report HTML. img_src(key) -> value for the <img src> attribute;
     the default embeds base64 data URIs (the self-contained HTML file). The PDF
@@ -666,8 +599,6 @@ def build_html(analysis, lang: str, figures: Dict[str, bytes], img_src=None,
     if socket is not None:
         parts.extend(_socket_section(T, L, socket, figures, img_src, lang, N,
                                      page_break=analysis is not None))
-    if study is not None and study.rows:
-        parts.extend(_study_section(T, L, study, figures, img_src, N))
     parts.append("</body></html>")
     return "\n".join(parts)
 
@@ -675,31 +606,30 @@ def build_html(analysis, lang: str, figures: Dict[str, bytes], img_src=None,
 # ----------------------------------------------------------------------
 # exporters
 # ----------------------------------------------------------------------
-def _all_figures(analysis, lang, study, socket):
+def _all_figures(analysis, lang, socket):
     figures = render_figures(analysis, lang)
     figures.update(render_socket_figures(socket, lang))
-    figures.update(render_study_figures(study, lang))
     return figures
 
 
-def export_pdf(path: str, analysis, lang: str, study=None, socket=None) -> None:
+def export_pdf(path: str, analysis, lang: str, socket=None) -> None:
     """PDF through reportlab; the figures travel as `fig://<key>` references."""
-    from slipsurface.common import pdf as pdf_writer
+    from slipsurface.pile.common import pdf as pdf_writer
 
     T = TEXTS.get(lang, TEXTS["en"])
     source = analysis if analysis is not None else socket
     info = source.config.get("project_info", {})
-    figures = _all_figures(analysis, lang, study, socket)
+    figures = _all_figures(analysis, lang, socket)
     html_text = build_html(analysis, lang, figures, img_src=lambda k: f"fig://{k}",
-                           study=study, socket=socket)
+                           socket=socket)
     pdf_writer.html_to_pdf(path, html_text, figures,
                            title=info.get("title", T["title"]),
                            author=info.get("analyst", ""),
                            footer=f"{info.get('title', '')} — {APP_NAME} v{APP_VERSION}")
 
 
-def export_report(path: str, analysis, lang: str, study=None, socket=None) -> None:
+def export_report(path: str, analysis, lang: str, socket=None) -> None:
     """The calculation report, always as PDF; '.pdf' is added when missing."""
     if not path.lower().endswith(".pdf"):
         path = f"{path}.pdf"
-    export_pdf(path, analysis, lang, study, socket)
+    export_pdf(path, analysis, lang, socket)

@@ -1,8 +1,7 @@
 """
 Shared Matplotlib styling helpers: theme-aware figure/axis styling and a
-semantic colour palette, used by plotting.py (the analysis figures) and
-study_plots.py (the study figures) so every figure the app draws matches the
-current light/dark UI theme.
+semantic colour palette, used by plotting.py (the analysis figures) in a light,
+dark or paper (report) theme.
 """
 
 from typing import Dict

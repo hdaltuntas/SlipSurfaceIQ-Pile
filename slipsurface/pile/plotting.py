@@ -29,9 +29,15 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from matplotlib.figure import Figure
-from matplotlib.lines import Line2D
-from matplotlib.patches import Circle, Rectangle
+
+from ._optional import missing
+
+try:
+    from matplotlib.figure import Figure
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Circle, Rectangle
+except ImportError as exc:
+    raise missing("matplotlib", "plot") from exc
 
 from .config import (
     CLAY_METHODS,

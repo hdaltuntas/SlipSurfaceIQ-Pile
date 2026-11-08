@@ -364,18 +364,8 @@ def socket_groups(lang: str = "en") -> List[Group]:
     ]
 
 
-def study_groups(lang: str = "en") -> List[Group]:
-    from .study import METHODS as SAMPLING
-    return [Group(_t(lang, "group_study"), [
-        _select("study_method", _t(lang, "study_method"), "lhs",
-                [(m, _t(lang, f"sampling_{m}")) for m in SAMPLING]),
-        _num("study_n", _t(lang, "study_n"), 200, 3, 100000, "", 0, 50),
-        _num("study_seed", _t(lang, "study_seed"), 0, 0, 10 ** 6, "", 0, 1),
-    ], note=_t(lang, "study_note"), when=IN_SOIL)]
-
-
 # --------------------------------------------------------------------------- #
-#  Tables: soil layers, study variables
+#  Tables: soil layers
 # --------------------------------------------------------------------------- #
 
 SOIL_NUMBERS = ["thickness", "gamma", "gamma_sat", "phi", "cu", "OCR", "N60", "E", "nu",
@@ -401,24 +391,6 @@ def soil_columns(lang: str = "en") -> List[dict]:
             + [number(key) for key in SOIL_NUMBERS[1:]])
 
 
-def study_columns(lang: str = "en") -> List[dict]:
-    """Columns of the study variable table."""
-    from .study import DISTRIBUTIONS
-    return [
-        {"key": "path", "label": _t(lang, "col_param"), "kind": "select", "options": []},
-        {"key": "mode", "label": _t(lang, "col_mode"), "kind": "select",
-         "options": [{"value": "range", "label": _t(lang, "mode_range")},
-                     {"value": "dist", "label": _t(lang, "mode_dist")}]},
-        {"key": "min", "label": _t(lang, "col_min"), "kind": "number"},
-        {"key": "max", "label": _t(lang, "col_max"), "kind": "number"},
-        {"key": "dist", "label": _t(lang, "col_dist"), "kind": "select",
-         "options": [{"value": d, "label": _t(lang, f"dist_{d}")} for d in DISTRIBUTIONS]},
-        {"key": "mean", "label": _t(lang, "col_mean"), "kind": "number"},
-        {"key": "cov", "label": _t(lang, "col_cov"), "kind": "number"},
-        {"key": "n_points", "label": _t(lang, "col_points"), "kind": "number"},
-    ]
-
-
 def default_soil_rows() -> List[dict]:
     return [dict(layer) for layer in DEFAULT_CONFIG["soil_profile"]]
 
@@ -428,12 +400,11 @@ def default_soil_rows() -> List[dict]:
 # --------------------------------------------------------------------------- #
 
 #: The parts of the schema made of groups of fields
-PARTS = ("project", "pile", "options", "socket", "study")
+PARTS = ("project", "pile", "options", "socket")
 
 #: The pile types each part and table of the schema belongs to; a part that is
 #: not listed applies to every type.
-PART_TYPES = {"options": SOIL_PILES, "socket": ["socket"], "study": SOIL_PILES,
-              "soil": SOIL_PILES, "study_vars": SOIL_PILES}
+PART_TYPES = {"options": SOIL_PILES, "socket": ["socket"], "soil": SOIL_PILES}
 
 
 def uses_soil_profile(values: dict) -> bool:
@@ -451,18 +422,15 @@ def schema(lang: str = "en") -> dict:
         "pile": {"groups": [g.to_dict() for g in pile_groups(lang)]},
         "options": {"groups": [g.to_dict() for g in option_groups(lang)]},
         "socket": {"groups": [g.to_dict() for g in socket_groups(lang)]},
-        "study": {"groups": [g.to_dict() for g in study_groups(lang)]},
         "soil": {"columns": soil_columns(lang), "rows": default_soil_rows(),
                  "note": _t(lang, "soil_note"), "clay_only": list(CLAY_ONLY),
                  "sand_only": list(SAND_ONLY)},
-        "study_vars": {"columns": study_columns(lang)},
     }
 
 
 def _all_groups(lang: str = "en") -> List[Group]:
     return ([pile_type_group(lang)] + project_groups(lang) + pile_groups(lang)
-            + option_groups(lang)
-            + socket_groups(lang) + study_groups(lang))
+            + option_groups(lang) + socket_groups(lang))
 
 
 def defaults(lang: str = "en") -> Dict[str, Any]:
@@ -472,7 +440,6 @@ def defaults(lang: str = "en") -> Dict[str, Any]:
         for f in group.fields:
             values[f.key] = f.default
     values["soil_profile"] = default_soil_rows()
-    values["study_variables"] = []
     return values
 
 
@@ -601,49 +568,11 @@ def from_config(cfg: dict, base: Optional[dict] = None) -> Dict[str, Any]:
         layer_defaults = DEFAULT_CONFIG["soil_profile"][0]
         values["soil_profile"] = [{**layer_defaults, **layer} for layer in cfg["soil_profile"]
                                   if isinstance(layer, dict)]
-    study = cfg.get("study") or {}
-    for src, dst in (("method", "study_method"), ("n", "study_n"), ("seed", "study_seed")):
-        if src in study:
-            values[dst] = study[src]
-    if "variables" in study:
-        values["study_variables"] = [dict(spec) for spec in study["variables"]]
     return values
 
 
-def study_spec(values: dict) -> Dict[str, Any]:
-    """The study block of a project file: options plus the variable table."""
-    from .study import METHODS as SAMPLING
-    return {
-        "method": _s(values, "study_method", "lhs", SAMPLING),
-        "n": int(_f(values, "study_n", 200)),
-        "seed": int(_f(values, "study_seed", 0)),
-        "variables": [dict(spec) for spec in values.get("study_variables") or []],
-    }
-
-
 def project_file(values: dict) -> Dict[str, Any]:
-    """What `Save` writes: the configuration plus the study definition."""
+    """What `Save` writes: the configuration, with the file's format and version.
+    (A `study` block in an older file is ignored when it is read.)"""
     cfg = to_config(values)
-    return {"format": FILE_FORMAT, "version": FILE_VERSION, **cfg, "study": study_spec(values)}
-
-
-def study_variables(values: dict):
-    """The study variables as `study.StudyVariable` objects."""
-    from .study import StudyVariable
-    return [StudyVariable.from_dict(spec) for spec in values.get("study_variables") or []]
-
-
-def variable_choices(values: dict, lang: str = "en") -> List[dict]:
-    """Every input a study may vary, with a readable label and its project value."""
-    from .study import available_variables, get_value, pretty_label
-    cfg = to_config(values)
-    L = TRANSLATIONS.get(lang, TRANSLATIONS["en"])
-    out = []
-    for path, _ in available_variables(cfg):
-        try:
-            base = float(get_value(cfg, path))
-        except (KeyError, IndexError, TypeError, ValueError):
-            continue
-        out.append({"value": path, "label": pretty_label(cfg, path, L), "base": base})
-    return out
-
+    return {"format": FILE_FORMAT, "version": FILE_VERSION, **cfg}

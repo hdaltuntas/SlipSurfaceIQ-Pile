@@ -9,6 +9,9 @@ The Suite keeps three version families in step with each other:
 Everything here is standard-library only, because the version machinery is
 needed before any application — and therefore before any of their
 dependencies — is imported.
+
+Pile carries its own copy (`slipsurface.pile.versioning`), so the published
+package owns nothing outside `slipsurface.pile`.
 """
 from __future__ import annotations
 

@@ -44,10 +44,10 @@ def _visible_fields(pile_type):
 
 def test_each_pile_type_sees_only_its_own_inputs():
     bored, socket = _visible_fields("bored"), _visible_fields("socket")
-    assert {"D", "L", "Q", "nx", "clay_method", "study_n"} <= bored
+    assert {"D", "L", "Q", "nx", "clay_method"} <= bored
     assert not {"socket_D", "qu", "fc"} & bored
     assert {"socket_D", "socket_Ls", "rock_depth", "qu", "fc", "design"} <= socket
-    assert not {"D", "L", "Q", "nx", "clay_method", "study_n"} & socket
+    assert not {"D", "L", "Q", "nx", "clay_method"} & socket
     # site data applies to both
     assert {"water_depth", "title"} <= bored & socket
     assert forms.PART_TYPES["soil"] == ["bored", "driven"]
@@ -91,7 +91,7 @@ def test_reports_are_always_pdf(tmp_path):
 
 def test_a_driven_pile_has_the_soil_inputs_and_its_installation():
     driven, bored = _visible_fields("driven"), _visible_fields("bored")
-    assert driven >= {"D", "L", "Q", "nx", "clay_method", "study_n"}
+    assert driven >= {"D", "L", "Q", "nx", "clay_method"}
     assert driven == bored   # same groups; only the installation field differs
     fields = {f["key"]: f for g in forms.schema()["pile"]["groups"] for f in g["fields"]}
     assert fields["installation"]["when"] == [{"key": "pile_type", "in": ["driven"]}]

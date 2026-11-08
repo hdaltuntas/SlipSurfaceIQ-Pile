@@ -163,7 +163,7 @@ def test_a_clay_without_cu_is_refused():
     assert caught.value.key == "err_cu"
 
 
-def test_the_study_run_leaves_the_length_out():
+def test_a_run_without_the_length_search_leaves_it_out():
     res = PileAnalysis(DEFAULT_CONFIG).run(with_length=False)
     assert res["length_curve"] == [] and math.isnan(res["required_length"])
 

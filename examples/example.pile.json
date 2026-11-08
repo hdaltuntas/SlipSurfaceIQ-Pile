@@ -174,11 +174,5 @@
     "FS_base": 3.0,
     "min_ratio": 3.0,
     "weak_rock": 5.0
-  },
-  "study": {
-    "method": "lhs",
-    "n": 200,
-    "seed": 0,
-    "variables": []
   }
 }

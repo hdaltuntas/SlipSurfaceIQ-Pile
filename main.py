@@ -1,12 +1,12 @@
-"""SlipSurfaceIQ Pile — desktop GUI or command-line analysis / optimization.
+"""SlipSurfaceIQ Pile — command-line analysis / optimization from a source checkout.
+
+Installed from PyPI, the same commands are `slipsurface-pile …`.
 
 Examples
 --------
-    python main.py                               # open the GUI
     python main.py --check                       # dependency check
     python main.py analyze project.pile.json     # analyse, print the results
     python main.py analyze project.pile.json -o report.pdf
-    python main.py study project.pile.json -o samples.csv
     python main.py optimize-length project.pile.json
     python main.py optimize-cost project.pile.json --popsize 15 --maxiter 30
     python main.py example --type socket -o socket.pile.json
