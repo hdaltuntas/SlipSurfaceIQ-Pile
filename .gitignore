@@ -4,7 +4,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-pytest_full.log
 build/
 dist/
 *.egg-info/
@@ -13,5 +12,3 @@ dist/
 .idea/
 .vscode/
 .vs/
-.test-tmp*/
-/.ui-*.png

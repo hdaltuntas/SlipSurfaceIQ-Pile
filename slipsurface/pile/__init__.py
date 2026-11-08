@@ -40,19 +40,18 @@ Package layout
     slipsurface.pile.engine        the pile analysis
     slipsurface.pile.optimizer     shortest safe length, cheapest safe length and diameter
     slipsurface.pile.summary       the results as text and headline values
-    slipsurface.pile.forms         flat inputs <-> configuration, project files
+    slipsurface.pile.project       configurations and project files
     slipsurface.pile.plotting      analysis figures              (extra: plot)
     slipsurface.pile.report        calculation report as PDF     (extra: report)
 
-Run it:  python main.py [command]   (or  python -m slipsurface.pile [command])
-After `pip install slipsurfaceiq-pile`:  slipsurface-pile [command]
+Command line:  slipsurface-pile [command]   (or  python -m slipsurface.pile [command])
 
 As a library
 ------------
     >>> from slipsurface import pile
-    >>> values = pile.defaults()               # the starter bored pile
-    >>> values["L"] = 18.0                     # flat inputs (see forms.defaults)
-    >>> result = pile.analyse(pile.to_config(values))
+    >>> cfg = pile.default_config("bored")     # a complete starter configuration
+    >>> cfg["pile"]["L"] = 18.0
+    >>> result = pile.analyse(cfg)
     >>> result.results["FS"], result.results["Q_all"]
     >>> from slipsurface.pile import summary
     >>> print(summary.results_text(result))
@@ -64,9 +63,7 @@ analysis needs only NumPy and SciPy; figures and the PDF report are extras
 
 from importlib import import_module
 
-from .versioning import module_version
-
-__version__ = module_version(__file__)
+__version__ = "2026.0.0"
 
 APP_NAME = "SlipSurface IQ Pile"
 ORG = "SlipSurface IQ"
@@ -77,8 +74,8 @@ ORG = "SlipSurface IQ"
 _API = {
     "analyse": "engine", "PileAnalysis": "engine",
     "analyse_socket": "socket", "SocketAnalysis": "socket",
-    "defaults": "forms", "to_config": "forms", "from_config": "forms",
-    "project_file": "forms", "load_config": "cli", "load_values": "cli",
+    "default_config": "project", "normalize": "project", "load_config": "project",
+    "save_config": "project",
     "optimize_length": "optimizer", "optimize_cost": "optimizer",
     "PileError": "errors", "MissingDependency": "_optional",
 }

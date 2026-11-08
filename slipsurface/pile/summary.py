@@ -16,17 +16,6 @@ from typing import List
 from .config import CLAY_METHODS, SOCKET_BASE_METHODS, SOCKET_SIDE_METHODS, TIP_METHODS
 from .i18n import TRANSLATIONS, warning_text
 
-#: Card order, as the interface lays them out
-CARD_KEYS = ["Q_ult", "Q_net", "Q_all", "pile_load", "check_pile", "check_group",
-             "settlement", "length"]
-
-#: The cards the seismic load case adds when the earthquake is on
-SEISMIC_CARD_KEYS = ["seismic_compression", "seismic_tension"]
-
-SOCKET_CARD_KEYS = ["socket_fs", "socket_qb", "socket_length", "socket_Q_all",
-                    "socket_check", "socket_settlement"]
-
-
 def _lang(lang: str) -> dict:
     return TRANSLATIONS.get(lang, TRANSLATIONS["en"])
 
@@ -42,12 +31,6 @@ def method_label(L: dict, key: str) -> str:
     return L.get(f"method_{key}", key)
 
 
-def _kn(value: float, nd: int = 0) -> str:
-    if value is None or not math.isfinite(value):
-        return "—"
-    return f"{value:,.{nd}f} kN"
-
-
 def _num(value, nd: int = 1) -> str:
     if value is None or not math.isfinite(value):
         return "—"
@@ -61,78 +44,6 @@ def _row(first: str, values, width: int = 28, cell: int = 13) -> str:
 # --------------------------------------------------------------------------- #
 #  Pile
 # --------------------------------------------------------------------------- #
-
-def cards(analysis, lang: str = "en") -> List[dict]:
-    """The headline numbers: the capacity, the load, the checks and the length."""
-    L = _lang(lang)
-    res = analysis.results
-    checks = res["checks"]
-    out = []
-
-    def card(key, value, sub="", state=""):
-        out.append({"key": key, "title": L[f"card_{key}"], "value": value, "sub": sub,
-                    "state": state})
-
-    card("Q_ult", _kn(res["Q_ult"]), f"Qs = {res['Qs']:,.0f} · Qb = {res['Qb']:,.0f} kN")
-    card("Q_net", _kn(res["Q_ult_net"]), L["card_weight"].format(W=res["W"]))
-    card("Q_all", _kn(res["Q_all"]), f"FS = {analysis.FS:.2f}")
-    card("pile_load", _kn(res["Q_pile"]), L["card_piles"].format(n=res["n"], Q=res["Q"]))
-    text, state = status_text(L, checks["pile"]["status"])
-    card("check_pile", text, f"FS = {checks['pile']['actual']:.2f} / "
-         f"{checks['pile']['allowable']:.2f}", state)
-    group = res["group"]
-    text, state = status_text(L, checks["group"]["status"])
-    card("check_group", text, f"η = {group['eta_used']:.2f} · FS = {group['FS']:.2f}", state)
-    s = checks["settlement"]
-    text, state = status_text(L, s["status"])
-    card("settlement", f"{s['actual']:.1f} mm",
-         f"{L['gs_' + res['settlement']['method']]} · ≤ {s['allowable']:.0f} mm", state)
-    length = res["required_length"]
-    card("length", f"{length:.2f} m" if math.isfinite(length) else L["card_none"],
-         L["card_tip"].format(z=analysis.top + length) if math.isfinite(length) else "",
-         "" if math.isfinite(length) else "na")
-    seismic = res.get("seismic")
-    if seismic:
-        c = checks["seismic_compression"]
-        text, state = status_text(L, c["status"])
-        card("seismic_compression", text,
-             f"Pmax = {seismic['P_max']:,.0f} kN · FS = {c['actual']:.2f}", state)
-        t = checks["seismic_tension"]
-        text, state = status_text(L, t["status"])
-        tension = seismic["tension"]
-        card("seismic_tension", text if tension["T"] > 0 else L["card_no_tension"],
-             f"T = {tension['T']:,.0f} kN · Tall = {tension['T_all']:,.0f} kN", state)
-    return out
-
-
-def method_table(analysis, lang: str = "en") -> dict:
-    """The shaft methods against the base methods: the net ultimate capacity of each."""
-    L = _lang(lang)
-    res = analysis.results
-    columns = [L["head_shaft_method"], L["head_Qs"]] + \
-        [method_label(L, tip) for tip in TIP_METHODS]
-    rows = []
-    primary = res["primary"]
-    clay_rows = CLAY_METHODS if res["shaft"]["cohesive"] else [primary["clay"]]
-    for clay in clay_rows:
-        cells = [method_label(L, clay) if res["shaft"]["cohesive"] else L["method_granular"],
-                 f"{res['shaft']['Qs'][clay]:,.0f}"]
-        states = ["", ""]
-        for tip in TIP_METHODS:
-            combo = res["combos"][f"{clay}|{tip}"]
-            cells.append(f"{combo['Q_ult_net']:,.0f}")
-            fs = combo["Q_ult_net"] / res["Q_pile"]
-            states.append("ok" if fs >= analysis.FS else "bad")
-        rows.append({"cells": cells, "states": states, "primary": clay == primary["clay"]})
-    if math.isfinite(res["shaft"]["Qs_spt"]) and math.isfinite(res["base"]["Qb_spt"]):
-        net = res["shaft"]["Qs_spt"] + res["base"]["Qb_spt"] - res["W_used"]
-        rows.append({"cells": [method_label(L, "spt"), f"{res['shaft']['Qs_spt']:,.0f}",
-                               f"{net:,.0f}", "", ""],
-                     "states": ["", "", "ok" if net / res["Q_pile"] >= analysis.FS else "bad",
-                                "", ""],
-                     "primary": False})
-    return {"columns": columns, "rows": rows}
-
 
 def results_text(analysis, lang: str = "en") -> str:
     """The whole pile analysis as text, in the chosen language."""
@@ -300,58 +211,6 @@ def headline(analysis, lang: str = "en") -> str:
 #  Rock socket
 # --------------------------------------------------------------------------- #
 
-def socket_cards(socket, lang: str = "en") -> List[dict]:
-    L = _lang(lang)
-    res = socket.results
-    out = []
-
-    def card(key, value, sub="", state=""):
-        out.append({"key": key, "title": L[f"card_{key}"], "value": value, "sub": sub,
-                    "state": state})
-
-    design = res["design"]
-    name = L[f"design_{design}"] if design in res["stats"] else L[f"side_{design}"]
-    card("socket_fs", f"{res['fs_design']:,.0f} kPa", name)
-    card("socket_qb", f"{res['qb_design'] / 1000.0:,.1f} MPa",
-         L[f"base_design_{res['base_design']}"] if res["base_design"] in ("none", "min", "mean")
-         else L[f"base_{res['base_design']}"])
-    length = res["Ls_design"]
-    lo, hi = res["Ls_spread"]
-    card("socket_length", f"{length:.2f} m" if math.isfinite(length) else L["card_none"],
-         f"{lo:.2f} – {hi:.2f} m" if math.isfinite(lo) else "",
-         "" if math.isfinite(length) else "na")
-    check = res["check"]
-    card("socket_Q_all", _kn(check["Q_all"]), L["card_at_length"].format(Ls=res["Ls_check"]))
-    text, state = status_text(L, check["status"])
-    card("socket_check", text, f"Q/Qall = {check['utilisation']:.2f}", state)
-    st = res["settlement"]
-    card("socket_settlement", f"{1000 * st['rw']['total']:.1f} mm",
-         L["card_base_share"].format(share=100 * st["rw"]["base_share"]))
-    return out
-
-
-def socket_table(socket, lang: str = "en") -> dict:
-    """Every side shear correlation: fs, the length it needs, the capacity it gives."""
-    L = _lang(lang)
-    res = socket.results
-    columns = [L["head_correlation"], L["head_formula"], L["head_fs"], L["head_Ls_req"],
-               L["head_Q_all"]]
-    rows = []
-    for key in SOCKET_SIDE_METHODS:
-        entry = res["side"][key]
-        Ls = entry["Ls_req"]
-        rows.append({
-            "cells": [L[f"side_{key}"], entry["formula"], f"{entry['fs']:,.0f}",
-                      f"{Ls:.2f}" if math.isfinite(Ls) else "—",
-                      f"{entry['Q_all']:,.0f}"],
-            "states": ["", "", "", "" if entry["in_range"] else "off",
-                       "ok" if entry["Q_all"] >= res["Q"] else "bad"],
-            "primary": key == res["design"],
-            "muted": not entry["in_range"],
-        })
-    return {"columns": columns, "rows": rows}
-
-
 def socket_text(socket, lang: str = "en") -> str:
     """The rock socket as text."""
     L = _lang(lang)
@@ -415,10 +274,6 @@ def socket_text(socket, lang: str = "en") -> str:
         lines += ["", L["warnings_title"]]
         lines += ["  • " + warning_text(lang, w) for w in res["warnings"]]
     return "\n".join(lines)
-
-
-def socket_warnings(socket, lang: str = "en") -> List[str]:
-    return [warning_text(lang, w) for w in socket.results.get("warnings", [])]
 
 
 def socket_headline(socket, lang: str = "en") -> str:

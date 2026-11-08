@@ -13,7 +13,7 @@ to its text.
 Fonts: the standard PDF fonts are Latin-1, which cannot spell Turkish (ı, ş,
 ğ) or the symbols an engineering report is full of (σ', γ, φ', Nγ). A Unicode
 TrueType font is registered instead — the DejaVu that comes with Matplotlib,
-which is a required dependency, so it is always there.
+which the [report] extra installs alongside reportlab.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple
 
-from .._optional import missing
+from ._optional import missing
 
 try:
     from reportlab.lib import colors

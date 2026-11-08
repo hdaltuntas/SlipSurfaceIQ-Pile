@@ -5,7 +5,7 @@ The report is assembled as HTML (the inputs, the base and shaft resistance of
 every method, the pile's weight, the capacity, the group, the settlement, the
 checks and the required length, the figures, the warnings and the method
 notes; the rock socket if one was analysed) and
-typeset as a PDF through reportlab (see `slipsurface.pile.common.pdf`). The
+typeset as a PDF through reportlab (see `slipsurface.pile.pdf`). The
 HTML is only the intermediate form the PDF is built from; it is not exported.
 """
 
@@ -614,7 +614,7 @@ def _all_figures(analysis, lang, socket):
 
 def export_pdf(path: str, analysis, lang: str, socket=None) -> None:
     """PDF through reportlab; the figures travel as `fig://<key>` references."""
-    from slipsurface.pile.common import pdf as pdf_writer
+    from . import pdf as pdf_writer
 
     T = TEXTS.get(lang, TEXTS["en"])
     source = analysis if analysis is not None else socket

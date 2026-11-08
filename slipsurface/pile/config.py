@@ -1,6 +1,6 @@
 """
 Configuration for SlipSurface IQ Pile: the default project, the choice lists, and the
-theme and plot palette shared by the page and the figures.
+themes and palette of the figures.
 
 The app name and version live in the package's ``__init__`` so that there is
 one copy of each; the translations live in `slipsurface.pile.i18n`.
@@ -67,12 +67,10 @@ OVERBURDEN_FRICTION = ["none", "soil"]
 # A rock socket is never shorter than this many pile diameters.
 MIN_SOCKET_RATIO = 3.0
 
-# --- Interface theme and plot palette --------------------------------------
-# --- kept together so the figures always match the page they are shown on. -
+# --- Figure themes and palette ---------------------------------------------
 ACCENT = "#5B7A3A"  # the colour of its group in the suite (foundations)
 
 THEMES = {
-    # The figure background matches the desktop interface's card colour.
     "dark": dict(bg="#1f2937", panel="#111827", input_bg="#111827", fg="#F9FAFB",
                  fg_dim="#9CA3AF", border="#374151", hover="#374151", btn="#374151",
                  muted="#6B7280", accent="#9BBA78", accent_hover="#AECB8D"),

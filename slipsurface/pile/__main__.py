@@ -1,4 +1,4 @@
-"""`python -m slipsurface.pile` — the same commands as `python main.py`."""
+"""`python -m slipsurface.pile` — the same commands as `slipsurface-pile`."""
 import sys
 
 from .cli import main

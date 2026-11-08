@@ -1,7 +1,6 @@
 """The one command line of SlipSurfaceIQ Pile.
 
-`slipsurface-pile …` (installed), `python main.py …` and
-`python -m slipsurface.pile …` all land here.
+`slipsurface-pile …` and `python -m slipsurface.pile …` both land here.
 
     analyze  (alias: run)    analyse a project — its pile type decides which
                              analysis — print the results, optionally a PDF
@@ -19,7 +18,6 @@ import importlib
 import json
 import math
 import sys
-from pathlib import Path
 
 from . import APP_NAME, __version__
 from ._optional import MissingDependency, install_hint
@@ -43,15 +41,6 @@ def _version_of(module: str):
         return None
 
 
-def _checkout_hint() -> str:
-    """How to install everything when running from a source checkout."""
-    requirements = Path(__file__).resolve().parents[3] / "requirements.txt"
-    if requirements.is_file():
-        return (f"        From this checkout:  {Path(sys.executable).name} -m pip install -r "
-                f"{requirements}")
-    return ""
-
-
 def check_environment(verbose: bool = True) -> bool:
     """True when Python and the packages the analysis needs (NumPy, SciPy) are
     there; says what is missing. With `verbose`, the optional ones are listed too."""
@@ -66,8 +55,6 @@ def check_environment(verbose: bool = True) -> bool:
         ok = False
         print("[ERROR] Missing package(s): " + ", ".join(missing), file=sys.stderr)
         print(f"        Install:  {install_hint()}", file=sys.stderr)
-    if missing and _checkout_hint():
-        print(_checkout_hint(), file=sys.stderr)
     if verbose:
         for mod in REQUIRED:
             print(f"  {mod:12s} {versions[mod] or 'MISSING'}")
@@ -137,25 +124,10 @@ def build_parser() -> argparse.ArgumentParser:
 #  Project files
 # --------------------------------------------------------------------------- #
 
-def load_values(path: str) -> dict:
-    """The flat values of a project file, whatever its layout."""
-    from . import forms
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if isinstance(data, dict) and "config" in data:
-        data = data["config"]
-    if isinstance(data, dict) and ("format" in data or "pile" in data
-                                   or "soil_profile" in data or "socket" in data):
-        # A nested project file: read every section it carries into flat
-        # values (to_config alone reads flat keys and would fall back to the
-        # defaults for the rest).
-        return forms.from_config(data)
-    return {**forms.defaults(), **data}
-
-
 def load_config(path: str) -> dict:
     """The analysis configuration of a project file."""
-    from . import forms
-    return forms.to_config(load_values(path))
+    from .project import load_config as load
+    return load(path)
 
 
 def _finite(value):
@@ -248,12 +220,8 @@ def cmd_optimize_cost(args) -> int:
 
 
 def cmd_example(args) -> int:
-    from . import forms
-    values = forms.defaults()
-    values["pile_type"] = args.type
-    values["title"] = forms.default_title(args.type)
-    Path(args.out).write_text(json.dumps(forms.project_file(values), indent=2,
-                                         ensure_ascii=False), encoding="utf-8")
+    from .project import default_config, save_config
+    save_config(default_config(args.type), args.out)
     print(args.out)
     return 0
 

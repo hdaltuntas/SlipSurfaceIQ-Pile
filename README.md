@@ -35,26 +35,27 @@ Without an extra, the analysis still works; asking for a figure or a report then
 from slipsurface import pile
 from slipsurface.pile import summary
 
-values = pile.defaults()            # a starter bored pile, as flat inputs
-values.update(D=1.0, L=18.0)        # diameter and length (m)
-result = pile.analyse(pile.to_config(values))
+cfg = pile.default_config("bored")  # a complete starter configuration: "bored", "driven" or "socket"
+cfg["pile"].update(D=1.0, L=18.0)   # diameter and length (m)
+result = pile.analyse(cfg)
 
 r = result.results
 print(r["FS"], r["Q_all"], r["required_length"], r["settlement"]["s"])
 print(summary.results_text(result))  # the full text report
 ```
 
-From a project file (`*.pile.json`, see `examples/`), and the optimizer:
+The configuration is a nested dictionary (`pile`, `loading`, `group`, `groundwater`, `soil_profile`, `options`, `settlement`, `seismic`, `criteria`, `socket`); `slipsurface.pile.config.DEFAULT_CONFIG` lists every key. `pile.normalize(cfg)` completes a partial one with the defaults. Project files (`*.pile.json`, see `examples/`) hold the same dictionary:
 
 ```python
 cfg = pile.load_config("examples/example.pile.json")
 result = pile.analyse(cfg)
+pile.save_config(cfg, "copy.pile.json")
 
 best = pile.optimize_length(cfg, L_bounds=(5, 40))
 print(best["best_L"], best["success"])
 ```
 
-A rock-socketed pile: `pile.analyse_socket(cfg)` for a configuration whose `pile_type` is `"socket"`.
+A rock-socketed pile: `pile.analyse_socket(pile.default_config("socket"))`.
 
 Figures (`[plot]`) and the PDF report (`[report]`):
 
@@ -87,10 +88,8 @@ slipsurface-pile --check                                 # Python and the depend
 
 ## Development
 
-From a checkout, `python main.py …` takes the same commands.
-
 ```bash
-python -m pip install -r requirements.txt pytest
+python -m pip install -e ".[all]" pytest
 python -m pytest -q
 ```
 
@@ -99,14 +98,13 @@ GitHub Actions runs the tests on Python 3.10 and 3.12 for every pull request and
 ### Releasing to PyPI
 
 1. Once, on PyPI: add a *Trusted Publisher* for this repository with workflow `publish.yml` and environment `pypi`.
-2. Raise the version in both `pyproject.toml` and `slipsurface/pile/app.json` (a test checks they agree).
+2. Raise `__version__` in `slipsurface/pile/__init__.py` (the only place it is written).
 3. Tag and push: `git tag v2026.0.0 && git push origin v2026.0.0`. The `publish` workflow tests, builds and uploads.
 
 ## Project layout
 
-- `slipsurface/pile/`: the package (`engine`, `socket`, `optimizer`, `forms`, `summary`, `plotting`, `report`, `cli`)
+- `slipsurface/pile/`: the package (`engine`, `socket`, `optimizer`, `project`, `summary`, `plotting`, `report`, `cli`)
 - `slipsurface/` is a namespace shared by the programs of the suite; this package ships only `slipsurface.pile`, so the others can be installed beside it
-- `main.py`: the command line from a checkout
 - `examples/`: a project file
 
 ## Engineering disclaimer

@@ -4,8 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slipsurfaceiq-pile"
-# Keep in step with slipsurface/pile/app.json (tests/test_packaging.py checks it)
-version = "2026.0.0"
+dynamic = ["version"]
 description = "Axial capacity, group action and settlement of bored and driven piles, and rock-socketed piles"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -54,8 +53,8 @@ Issues = "https://github.com/hdaltuntas/SlipSurfaceIQ-Pile/issues"
 include = ["slipsurface.pile*"]
 namespaces = true
 
-[tool.setuptools.package-data]
-"slipsurface.pile" = ["app.json"]
+[tool.setuptools.dynamic]
+version = { attr = "slipsurface.pile.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

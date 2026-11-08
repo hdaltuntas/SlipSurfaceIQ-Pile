@@ -13,21 +13,20 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "example.pile.json"
 
 
-def _pyproject_version() -> str:
-    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    return re.search(r'^version = "([^"]+)"', text, re.MULTILINE).group(1)
-
-
-def test_one_version_everywhere():
+def test_the_version_has_one_home():
+    # pyproject.toml reads it from here (setuptools, statically), and so does
+    # the publish workflow's tag check: it must stay a plain string literal
     from slipsurface import pile
-    manifest = json.loads((ROOT / "slipsurface" / "pile" / "app.json").read_text("utf-8"))
-    assert _pyproject_version() == manifest["version"] == pile.__version__
+    text = (ROOT / "slipsurface" / "pile" / "__init__.py").read_text(encoding="utf-8")
+    literal = re.search(r'^__version__ = "([^"]+)"$', text, re.MULTILINE)
+    assert literal and literal.group(1) == pile.__version__
+    assert 'dynamic = ["version"]' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
 
 def test_the_package_owns_nothing_outside_slipsurface_pile():
     # `slipsurface` is shared by the programs of the suite: whoever ships
-    # slipsurface/__init__.py (or slipsurface/ui, slipsurface/common …) would
-    # overwrite the files of the others
+    # slipsurface/__init__.py (or slipsurface/ui …) would overwrite the files
+    # of the others
     assert not (ROOT / "slipsurface" / "__init__.py").exists()
     assert [p.name for p in (ROOT / "slipsurface").iterdir()
             if p.name != "__pycache__"] == ["pile"]
@@ -53,9 +52,8 @@ sys.meta_path.insert(0, NoExtras())
 
 from slipsurface import pile
 assert "numpy" not in sys.modules            # importing the package is free
-values = pile.defaults()
-result = pile.analyse(pile.to_config(values))
-socket = pile.analyse_socket(pile.to_config({{**values, "pile_type": "socket"}}))
+result = pile.analyse(pile.default_config("bored"))
+socket = pile.analyse_socket(pile.default_config("socket"))
 from slipsurface.pile import summary
 text = summary.results_text(result)
 

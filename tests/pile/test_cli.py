@@ -1,4 +1,4 @@
-"""The one command line: `python main.py` and `python -m slipsurface.pile`."""
+"""The command line: `slipsurface-pile` and `python -m slipsurface.pile`."""
 import json
 
 import pytest
@@ -37,8 +37,3 @@ def test_analyze_writes_a_pdf_report(project, tmp_path):
 def test_bored_only_commands_refuse_a_socket(project, capsys):
     assert cli.main(["optimize-length", project("socket")]) == 1
     assert "piles in soil" in capsys.readouterr().err
-
-
-def test_main_py_and_the_package_share_the_command_line():
-    import main
-    assert main.main is cli.main
