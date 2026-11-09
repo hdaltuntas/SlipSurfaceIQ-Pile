@@ -192,11 +192,15 @@ def randolph_wroth(P: float, L: float, r0: float, G: float, Gb: float, nu: float
     rm = max((0.25 + xi * (2.5 * rho * (1.0 - nu) - 0.25)) * L, 2.0 * r0)
     zeta = math.log(rm / r0)
     mu_L = math.sqrt(2.0 / (zeta * lam)) * (L / r0)
-    t = math.tanh(mu_L) / mu_L
+    t = math.tanh(mu_L) / mu_L if mu_L > 0 else 1.0
     base = 4.0 * eta / ((1.0 - nu) * xi) if with_base else 0.0
     shaft = 2.0 * math.pi * rho / zeta * t * (L / r0)
     stiffness = G * r0 * (base + shaft) / (1.0 + base * t * (L / r0) / (math.pi * lam))
-    base_share = base / (math.cosh(mu_L) * (base + shaft)) if with_base else 0.0
+    # sech(mu_L) written with negative exponentials remains finite for very
+    # slender shafts; direct cosh(mu_L) overflows above about 710.
+    decay = math.exp(-mu_L)
+    sech = 2.0 * decay / (1.0 + decay * decay)
+    base_share = base * sech / (base + shaft) if with_base else 0.0
     return {"w": P / stiffness, "K": stiffness, "base_share": base_share, "zeta": zeta,
             "mu_L": mu_L, "lambda": lam, "rm": rm}
 
@@ -209,7 +213,12 @@ class SocketAnalysis:
     """A pile socketed into rock. Build it, then call `run()`."""
 
     def __init__(self, config: Dict[str, Any]):
-        self.config = copy.deepcopy(config)
+        from .project import normalize
+
+        self.config = normalize(config)
+        if self.config.get("boreholes"):
+            raise PileError("err_config", field="boreholes",
+                            reason="use analyse() or analyse_socket() for independent log analyses")
         self.warnings: List = []
         self._soil: Dict[str, Any] = {"Qs": 0.0, "layers": []}
         self._read()
@@ -219,6 +228,7 @@ class SocketAnalysis:
         s = {**DEFAULT_CONFIG["socket"], **(self.config.get("socket") or {})}
         w = {**DEFAULT_CONFIG["groundwater"], **(self.config.get("groundwater") or {})}
         o = {**DEFAULT_CONFIG["options"], **(self.config.get("options") or {})}
+        c = self.config["criteria"]
         self.D = num(s, "D", 1.0)
         self.Ls = num(s, "Ls", 0.0)
         self.top = num(s, "top", 0.0)
@@ -234,7 +244,7 @@ class SocketAnalysis:
         self.mi = max(num(s, "mi", 10.0), 1.0)
         self.D_blast = min(max(num(s, "D_blast", 0.0), 0.0), 1.0)
         self.nu = num(s, "nu_r", 0.25)
-        self.Eb_ratio = max(num(s, "Eb_ratio", 1.0), 0.01)
+        self.Eb_ratio = num(s, "Eb_ratio", 1.0)
         self.spacing = num(s, "spacing", 0.6)
         self.aperture = max(num(s, "aperture", 0.0), 0.0)
         self.fc = num(s, "fc", 30.0)
@@ -252,10 +262,11 @@ class SocketAnalysis:
         self.overburden_friction = (s.get("overburden_friction")
                                     if s.get("overburden_friction") in OVERBURDEN_FRICTION
                                     else "none")
-        self.zw = max(num(w, "depth", 0.0), 0.0)
+        self.zw = math.inf if w.get("depth") is None else num(w, "depth", 0.0)
         self.gw = num(w, "gamma_water", 9.81)
         self.buoyant = bool(o.get("buoyant_weight", True))
         self.subtract_weight = bool(o.get("subtract_weight", True))
+        self.s_allow = num(c, "s_allow", 40.0)
 
         if self.D <= 0:
             raise PileError("err_socket_D")
@@ -305,6 +316,7 @@ class SocketAnalysis:
             return none
         from .engine import PileAnalysis
         cfg = copy.deepcopy(self.config)
+        cfg["pile_type"] = "bored"
         cfg["pile"] = {**DEFAULT_CONFIG["pile"], "shape": "circular", "D": self.D,
                        "L": self.overburden, "top": self.top, "installation": "bored",
                        "gamma_p": self.gamma_c, "Ep": self.Ec}
@@ -377,24 +389,49 @@ class SocketAnalysis:
                 else float("inf")}
 
     def required_length(self, fs: float, tolerance: float = 1e-3) -> float:
-        """The shortest socket whose allowable capacity carries the load, by bisection."""
-        if fs <= 0:
+        """Continuous capacity-only diagnostic, searched over linear segments.
+
+        CFEM's depth factor caps at 5D, and submerged weight changes at the
+        water table. A minimum-of-methods base choice adds a possible switch
+        between CFEM and a constant resistance. Checking these breakpoints
+        avoids assuming that the capacity at 60 m bounds every shorter pile.
+        """
+        if not math.isfinite(fs) or fs <= 0:
             return float("nan")
         if self.capacity(0.0, fs)["Q_all"] >= self.Q:
             return 0.0
-        hi = MAX_SOCKET
-        if self.capacity(hi, fs)["Q_all"] < self.Q:
-            return float("nan")
+        breakpoints = {0.0, MAX_SOCKET}
+        candidates = [self.zw - self.rock_depth]
+        if self.base_design in ("cfem", "mean", "min"):
+            candidates.append(5.0 * self.D)
+        if self.base_design == "min":
+            hb = hoek_brown(self.GSI, self.mi, self.D_blast)
+            constant = min(base_resistance(key, self.qu, hb, self.D, 0.0,
+                                           self.spacing, self.aperture)["qb"]
+                           for key in SOCKET_BASE_METHODS if key != "cfem")
+            cfem_zero = base_resistance("cfem", self.qu, hb, self.D, 0.0,
+                                        self.spacing, self.aperture)["qb"]
+            if cfem_zero > 0:
+                switch = (constant / cfem_zero - 1.0) * self.D / 0.4
+                if 0.0 < switch < 5.0 * self.D:
+                    candidates.append(switch)
+        breakpoints.update(value for value in candidates if 0.0 < value < MAX_SOCKET)
         lo = 0.0
-        for _ in range(80):
-            mid = 0.5 * (lo + hi)
-            if self.capacity(mid, fs)["Q_all"] >= self.Q:
-                hi = mid
-            else:
-                lo = mid
-            if hi - lo < tolerance:
-                break
-        return hi
+        for endpoint in sorted(breakpoints)[1:]:
+            if self.capacity(endpoint, fs)["Q_all"] < self.Q:
+                lo = endpoint
+                continue
+            hi = endpoint
+            for _ in range(80):
+                mid = 0.5 * (lo + hi)
+                if self.capacity(mid, fs)["Q_all"] >= self.Q:
+                    hi = mid
+                else:
+                    lo = mid
+                if hi - lo < tolerance:
+                    break
+            return hi
+        return float("nan")
 
     def settlement(self, Ls: float, fs: float) -> Dict[str, Any]:
         """The head settlement of the pile with a socket this long [m]."""
@@ -409,15 +446,81 @@ class SocketAnalysis:
         cap = self.capacity(Ls, fs)
         vesic = single_pile(self.Q, cap["Qs"], cap["Qb"], max(Ls, 1e-3), self.D, self.area,
                             self.perimeter, self.Ec, Em * self.Eb_ratio, self.nu, Em, self.nu)
+        method = "rw_side" if self.base_design == "none" else "rw"
+        selected = side if method == "rw_side" else rw
+        total = selected["w"] + shortening
         return {
             "Ls": Ls, "shortening": shortening,
+            "s": total, "method": method,
+            "status": "OK" if total * 1000.0 <= self.s_allow + 1e-9 else "NOT OK",
             "rw": {**rw, "total": rw["w"] + shortening},
             "rw_side": {**side, "total": side["w"] + shortening},
             "vesic": {**vesic, "total": vesic["s"] + shortening},
         }
 
+    def _checks(self, Ls: float, fs: float):
+        """Separate capacity, minimum socket geometry and serviceability."""
+        capacity = self.capacity(Ls, fs)
+        settlement = self.settlement(max(Ls, 0.05), fs)
+        minimum = self.min_ratio * self.D
+        checks = {
+            "capacity": {"actual": self.Q, "allowable": capacity["Q_all"],
+                         "utilisation": capacity["utilisation"]},
+            "min_length": {"actual": Ls, "allowable": minimum,
+                           "utilisation": minimum / Ls if Ls > 0 else float("inf")},
+            "settlement": {"actual": settlement["s"] * 1000.0,
+                           "allowable": self.s_allow,
+                           "utilisation": settlement["s"] * 1000.0 / self.s_allow,
+                           "method": settlement["method"]},
+        }
+        for check in checks.values():
+            util = check["utilisation"]
+            check["status"] = "OK" if math.isfinite(util) and util <= 1.0 + 1e-9 else "NOT OK"
+        capacity["capacity_status"] = checks["capacity"]["status"]
+        capacity["status"] = "OK" if all(c["status"] == "OK" for c in checks.values()) else "NOT OK"
+        settlement["status"] = checks["settlement"]["status"]
+        return capacity, settlement, checks
+
+    def _design_length(self, fs: float) -> float:
+        """First feasible whole metre at or above the minimum geometry.
+
+        Longer sockets are checked individually: their elastic shortening can
+        make settlement non-monotonic, so merely rounding is insufficient.
+        """
+        # Check every integer independently of the continuous diagnostic. In
+        # particular, capacity and settlement can both be non-monotonic.
+        start = math.ceil(self.min_ratio * self.D)
+        for length in range(start, math.floor(MAX_SOCKET) + 1):
+            check, _, _ = self._checks(float(length), fs)
+            if check["status"] == "OK":
+                return float(length)
+        return float("nan")
+
+    def check_length(self, Ls: float, fs: float | None = None) -> Dict[str, Any]:
+        """Check one socket geometry after run(), without repeating searches.
+
+        This is also the per-borehole evaluation used by a common-design
+        envelope. The returned capacity dictionary retains the overall status.
+        """
+        length = float(Ls)
+        if not math.isfinite(length) or length < 0:
+            raise ValueError("Socket length must be finite and nonnegative.")
+        if fs is None:
+            if "fs_design" not in self.results:
+                raise ValueError("Run the socket analysis before checking another length.")
+            fs = self.results["fs_design"]
+        fs = float(fs)
+        if not math.isfinite(fs) or fs <= 0:
+            raise ValueError("Socket side shear must be finite and positive.")
+        capacity, settlement, checks = self._checks(length, fs)
+        return {"Ls": length, "Ls_check": length, "check": capacity,
+                "capacity": capacity, "settlement": settlement, "checks": checks,
+                "utilisation": max(c["utilisation"] for c in checks.values())}
+
     # ------------------------------------------------------------------ the run
     def run(self) -> Dict[str, Any]:
+        # A new list also keeps results from earlier runs immutable.
+        self.warnings = []
         modulus = self._modulus()
         self._soil = self._overburden_shaft()
         if self._soil["Qs"] > 0:
@@ -458,26 +561,31 @@ class SocketAnalysis:
 
         for entry in side.values():
             entry["Ls_req"] = self.required_length(entry["fs"])
-            entry["Q_all"] = self.capacity(self.Ls, entry["fs"])["Q_all"]
+            entry["Ls_req_continuous"] = entry["Ls_req"]
+            entry["Ls_design"] = self._design_length(entry["fs"])
         Ls_req = self.required_length(fs_design)
         minimum = self.min_ratio * self.D
         if self._ratio_raised:
             self.warnings.append(message("warn_socket_min_ratio", n=MIN_SOCKET_RATIO))
-        Ls_design = max(Ls_req, minimum) if math.isfinite(Ls_req) else float("nan")
+        Ls_design = self._design_length(fs_design)
         lengths = [entry["Ls_req"] for entry in side.values()
                    if entry["in_range"] and math.isfinite(entry["Ls_req"])]
-        if not math.isfinite(Ls_req):
+        if not math.isfinite(Ls_design):
             self.warnings.append(message("warn_socket_no_length", hi=MAX_SOCKET))
 
         Ls_check = self.Ls if self.Ls > 0 else (Ls_design if math.isfinite(Ls_design) else 0.0)
-        check = self.capacity(Ls_check, fs_design)
-        check["status"] = "OK" if check["utilisation"] <= 1.0 + 1e-9 else "NOT OK"
-        if self.Ls > 0 and math.isfinite(Ls_design) and self.Ls + 1e-9 < Ls_design:
+        for entry in side.values():
+            entry["Ls_check"] = Ls_check
+            entry["Q_all"] = self.capacity(Ls_check, entry["fs"])["Q_all"]
+        check, settle, checks = self._checks(Ls_check, fs_design)
+        if (self.Ls > 0 and check["status"] == "NOT OK" and math.isfinite(Ls_design)
+                and self.Ls + 1e-9 < Ls_design):
             self.warnings.append(message("warn_socket_short", Ls=self.Ls, need=Ls_design))
         if check["qb"] > 1000.0 * self.fc:
             self.warnings.append(message("warn_socket_base_concrete",
                                          qb=check["qb"] / 1000.0, fc=self.fc))
-        settle = self.settlement(max(Ls_check, 0.05), fs_design)
+        design_check, design_settlement, design_checks = (self._checks(Ls_design, fs_design)
+            if math.isfinite(Ls_design) else (None, None, {}))
 
         self.results.update({
             "D": self.D, "A": self.area, "perimeter": self.perimeter, "Q": self.Q,
@@ -486,9 +594,12 @@ class SocketAnalysis:
             "hoek_brown": hb, "side": side, "stats": stats, "design": self.design,
             "fs_design": fs_design, "qb_design": check["qb"],
             "base_design": self.base_design,
-            "Ls_req": Ls_req, "Ls_min": minimum, "Ls_design": Ls_design,
+            "Ls_req": Ls_req, "Ls_req_continuous": Ls_req,
+            "Ls_min": minimum, "Ls_design": Ls_design,
+            "design_check": design_check, "design_checks": design_checks,
+            "design_settlement": design_settlement,
             "Ls_spread": (min(lengths), max(lengths)) if lengths else (float("nan"),) * 2,
-            "check": check, "settlement": settle, "warnings": self.warnings,
+            "check": check, "checks": checks, "settlement": settle, "warnings": self.warnings,
             "overburden_friction": self.overburden_friction,
             "Qs_soil": self._soil["Qs"], "overburden_layers": self._soil["layers"],
         })
@@ -505,7 +616,11 @@ class SocketAnalysis:
         return out
 
 
-def analyse_socket(config: Dict[str, Any]) -> SocketAnalysis:
+def analyse_socket(config: Dict[str, Any]):
+    if config.get("boreholes"):
+        from .analysis import analyse
+
+        return analyse({**config, "pile_type": "socket"})
     analysis = SocketAnalysis(config)
     analysis.run()
     return analysis

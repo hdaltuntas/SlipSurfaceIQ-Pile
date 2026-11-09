@@ -103,13 +103,88 @@ def test_a_thin_clay_lens_in_sand_is_kept():
         ["granular", "cohesive", "granular"]
 
 
-def test_tests_at_the_same_depth_in_several_boreholes_are_taken_together():
+def test_several_boreholes_keep_independent_profiles_and_water_tables():
     a = hole(sand(1.5, 10), sand(3.0, 12))
     b = {"name": "BH-2", "water_depth": 1.0, "records": [sand(1.5, 14), sand(3.1, 10)]}
-    prof = spt.derive_profile([a, b])
-    assert prof.water_depth == 1.0                       # the shallowest
-    assert len(prof.records) == 4 and len(prof.layers) == 1
-    assert {r["borehole"] for r in prof.records} == {"BH-1", "BH-2"}
+    investigation = spt.derive_profile([a, b])
+    assert isinstance(investigation, spt.SPTInvestigation)
+    assert investigation.names == ["BH-1", "BH-2"]
+    assert [p.water_depth for p in investigation.profiles] == [2.0, 1.0]
+    assert not hasattr(investigation, "layers")
+    for prof, original in zip(investigation.profiles, (a, b)):
+        standalone = spt.derive_profile(original)
+        assert prof.layers == standalone.layers
+        assert prof.records == standalone.records
+        assert len(prof.records) == 2
+        assert {r["borehole"] for r in prof.records} == {prof.name}
+
+
+def test_sand_and_clay_in_different_logs_are_not_voted_or_averaged():
+    a = {"name": "Sand log", "water_depth": 20.0, "records": [sand(3.0, 10)]}
+    b = {"name": "Clay log", "water_depth": 20.0, "records": [clay(3.0, 10, cu=20.0)]}
+    investigation = spt.derive_profile([a, b])
+    profiles = {p.name: p.layers for p in investigation.profiles}
+    assert profiles["Sand log"][0]["behaviour"] == "granular"
+    assert profiles["Clay log"][0]["behaviour"] == "cohesive"
+    assert profiles["Clay log"][0]["cu"] == 20.0
+    reversed_logs = spt.derive_profile([b, a])
+    assert {p.name: p.layers for p in reversed_logs.profiles} == profiles
+
+
+def test_investigation_applies_separate_copies_for_all_log_checks():
+    wet = hole(sand(3.0, 10), name="Wet", water_depth=1.0)
+    dry = {"name": "Dry", "records": [clay(3.0, 8)]}
+    investigation = spt.derive_profile([wet, dry])
+    original = pile.default_config()
+    cfg = investigation.apply(original)
+    assert "boreholes" not in original
+    assert [b["name"] for b in cfg["boreholes"]] == ["Wet", "Dry"]
+    assert [b["groundwater"]["depth"] for b in cfg["boreholes"]] == [1.0, None]
+    assert any(w.startswith("Dry:") for w in investigation.warnings)
+    cfg["boreholes"][0]["soil_profile"][0]["phi"] = 1.0
+    assert investigation.profiles[0].layers[0]["phi"] != 1.0
+
+
+def test_one_item_sequence_still_returns_an_spt_profile():
+    original = hole(sand(3.0, 10))
+    profile = spt.derive_profile([original])
+    assert isinstance(profile, spt.SPTProfile)
+    assert profile.name == "BH-1"
+    assert profile.layers == spt.derive_profile(original).layers
+
+
+def test_borehole_names_are_stable_and_must_be_unique():
+    anonymous = [{"records": [sand(3.0, 10)]}, {"records": [clay(3.0, 8)]}]
+    assert spt.derive_profile(anonymous).names == ["BH-1", "BH-2"]
+    with pytest.raises(ValueError, match="unique"):
+        spt.derive_profile([hole(sand(3.0, 10)), hole(clay(3.0, 8))])
+    with pytest.raises(ValueError, match="nonempty name"):
+        spt.derive_profile(hole(sand(3.0, 10), name="  "))
+    with pytest.raises(ValueError, match="unique"):
+        spt.derive_profile([hole(sand(3.0, 10), name="BH-1 "), hole(clay(3.0, 8))])
+
+
+def test_multiple_logs_require_individual_water_table_overrides():
+    with pytest.raises(ValueError, match="separately on each log"):
+        spt.derive_profile([hole(sand(3.0, 10)), hole(clay(3.0, 8), name="BH-2")],
+                           water_depth=1.0)
+
+
+@pytest.mark.parametrize("other", [clay(3.0, 10), {"depth": 3.0, "N": 10, "uscs": "GW"}])
+def test_contradictory_tests_at_one_depth_in_a_single_log_are_rejected(other):
+    with pytest.raises(ValueError, match="conflicting soil classifications"):
+        spt.derive_profile(hole(sand(3.0, 10), other))
+
+
+def test_compatible_repeated_tests_within_one_log_can_share_a_level():
+    profile = spt.derive_profile(hole(sand(3.0, 10), sand(3.0, 14)))
+    assert len(profile.layers) == 1 and len(profile.records) == 2
+    assert profile.layers[0]["N60"] == pytest.approx(9.0)
+
+
+def test_bottom_must_reach_below_every_test_in_a_grouped_level():
+    with pytest.raises(ValueError, match="below the deepest test"):
+        spt.derive_profile(hole(sand(3.0, 10), sand(3.2, 12)), bottom=3.1)
 
 
 # ------------------------------------------------------------- the parameters
@@ -119,6 +194,27 @@ def test_measured_values_take_precedence_over_the_correlations():
     layer, src = prof.layers[0], prof.sources[0]
     assert layer["cu"] == pytest.approx(40.0) and src["cu"] == "measured, mean of 2"
     assert src["phi"].startswith("Terzaghi, Peck & Mesri")
+
+
+@pytest.mark.parametrize("cu", [1e-6, 1.0, 4.9])
+def test_positive_measured_weak_clay_strength_is_never_increased(cu):
+    prof = spt.derive_profile(hole(clay(3.0, 10, cu=cu)))
+    assert prof.layers[0]["cu"] == cu
+    assert prof.sources[0]["cu"] == "measured, mean of 1"
+    assert not any("5 kPa" in warning for warning in prof.warnings)
+
+
+def test_unknown_water_is_explicitly_dry_when_a_profile_is_applied():
+    prof = spt.derive_profile({"records": [sand(9.0, 15)]})
+    original = pile.default_config()
+    original["boreholes"] = [{"name": "stale investigation"}]
+    cfg = prof.apply(original)
+    assert prof.water_depth is None
+    assert prof.records[0]["sigma_eff"] == pytest.approx(162.0)
+    assert cfg["groundwater"]["depth"] is None
+    assert "boreholes" not in cfg
+    assert "boreholes" in original
+    assert original["groundwater"]["depth"] == 2.5
 
 
 def test_without_lab_values_the_correlations_fill_in():
@@ -162,6 +258,45 @@ def test_bad_records_are_refused():
         spt.derive_profile(hole())
     with pytest.raises(ValueError, match="below the deepest test"):
         spt.derive_profile(hole(sand(3.0, 10)), bottom=2.0)
+
+
+@pytest.mark.parametrize("key", ["depth", "N", "fines", "LL", "PL", "w", "gamma", "cu",
+                                 "phi", "Cc", "Cr", "e0", "sigma_p", "E"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_every_numeric_spt_measurement_must_be_finite(key, value):
+    with pytest.raises(ValueError, match=f"{key}: a finite number"):
+        spt.derive_profile(hole({**sand(3.0, 10), key: value}))
+
+
+@pytest.mark.parametrize("key", ["energy_ratio", "borehole_diameter", "water_depth"])
+def test_numeric_borehole_metadata_must_be_finite(key):
+    with pytest.raises(ValueError, match=f"{key}: a finite number"):
+        spt.derive_profile(hole(sand(3.0, 10), **{key: float("nan")}))
+
+
+@pytest.mark.parametrize("key", ["water_depth", "bottom", "tolerance", "min_n_difference",
+                                 "min_thickness", "same_depth"])
+def test_numeric_derivation_options_must_be_finite(key):
+    with pytest.raises(ValueError, match=f"{key}: a finite number"):
+        spt.derive_profile(hole(sand(3.0, 10)), **{key: float("inf")})
+
+
+@pytest.mark.parametrize("extra, match", [
+    ({"fines": 101}, "fines"), ({"N": -1}, "N"), ({"depth": 0}, "depth"),
+    ({"LL": 20, "PL": 30}, "PL must not exceed LL"),
+    ({"Cc": 0.1, "Cr": 0.2}, "Cr must not exceed Cc"),
+    ({"cu": -1}, "cu"), ({"E": 0}, "E"), ({"phi": 50}, "phi"),
+    ({"N": True}, "N: a finite number"),
+    ({"behaviour": "unknown"}, "behaviour"), ({"uscs": "CS"}, "USCS"),
+])
+def test_inconsistent_or_out_of_range_sample_values_are_rejected(extra, match):
+    with pytest.raises(ValueError, match=match):
+        spt.derive_profile(hole({**sand(3.0, 10), **extra}))
+
+
+def test_text_liner_flags_are_not_silently_treated_as_true():
+    with pytest.raises(ValueError, match="liner must be a boolean"):
+        spt.derive_profile(hole(sand(3.0, 10), liner="false"))
 
 
 # ----------------------------------------------------------------- end to end

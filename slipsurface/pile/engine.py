@@ -20,8 +20,8 @@ layers, `PileAnalysis.run()` works out
       cap, the compression check of the most loaded pile, and the uplift of
       the piles in tension — shaft friction in tension plus the pile's weight —
       and of the whole block when the group as a whole is lifted
-    * the shortest pile that satisfies the single-pile and the group check,
-      and the seismic checks when the earthquake is on
+    * the shortest whole-metre pile that satisfies the single-pile, group,
+      settlement and, when enabled, seismic checks at that exact geometry
 
 Input problems are raised as `PileError`, which carries a translation key, so
 the interface can say what is wrong in the user's language.
@@ -29,7 +29,6 @@ the interface can say what is wrong in the user's language.
 
 from __future__ import annotations
 
-import copy
 import math
 from typing import Any, Dict, List
 
@@ -74,7 +73,14 @@ class PileAnalysis:
     """Axial capacity and settlement of one pile and its group. Build it, then `run()`."""
 
     def __init__(self, config: Dict[str, Any]):
-        self.config = copy.deepcopy(config)
+        from .project import normalize
+
+        self.config = normalize(config)
+        if self.config["pile_type"] == "socket":
+            raise PileError("err_pile_type", pile_type="socket")
+        if "boreholes" in self.config:
+            raise PileError("err_config", field="boreholes",
+                            reason="use analyse() for a multi-log envelope")
         self.warnings: List = []
         self._read()
         self.results: Dict[str, Any] = {}
@@ -142,7 +148,7 @@ class PileAnalysis:
         self.group_settlement = (s["group_method"] if s.get("group_method") in GROUP_SETTLEMENT
                                  else "raft")
         self.raft_fraction = min(max(num(s, "raft_fraction", 2.0 / 3.0), 0.0), 1.0)
-        self.spread = max(num(s, "spread", 2.0), 0.1)
+        self.spread = num(s, "spread", 2.0)
         self.distribution = (s["distribution"] if s.get("distribution") in SKIN_DISTRIBUTIONS
                              else "uniform")
 
@@ -155,11 +161,16 @@ class PileAnalysis:
         self.cyclic = min(max(num(e, "cyclic", 1.0), 0.0), 1.0)
         self.FS_E_c = max(num(e, "FS_compression", 1.5), 1.0)
         self.FS_E_t = max(num(e, "FS_tension", 2.0), 1.0)
+        if self.seismic_on:
+            if self.nx == 1 and self.M_B != 0.0:
+                raise PileError("err_seismic_moment", axis="B")
+            if self.ny == 1 and self.M_L != 0.0:
+                raise PileError("err_seismic_moment", axis="L")
 
         self.FS = max(num(c, "FS", 2.5), 1.0)
-        self.s_allow = max(num(c, "s_allow", 25.0), 0.1)
-        self.L_min = max(num(c, "L_min", 4.0), 0.5)
-        self.L_step = max(num(c, "L_step", 0.25), 0.05)
+        self.s_allow = num(c, "s_allow", 25.0)
+        self.L_min = num(c, "L_min", 4.0)
+        self.L_step = num(c, "L_step", 0.25)
 
         gamma_w = num(w, "gamma_water", 9.81)
         self.gamma_w = gamma_w
@@ -191,7 +202,8 @@ class PileAnalysis:
             layers.append(values)
         if not layers:
             raise PileError("err_no_layers")
-        self.profile = Profile(layers, max(num(w, "depth", 0.0), 0.0), gamma_w)
+        water_depth = math.inf if w["depth"] is None else num(w, "depth", 0.0)
+        self.profile = Profile(layers, water_depth, gamma_w)
         if self.top + self.L > self.profile.depth + 1e-9:
             raise PileError("err_tip_below", depth=self.profile.depth,
                             tip=self.top + self.L)
@@ -348,6 +360,10 @@ class PileAnalysis:
         points = grp.positions(self.nx, self.ny, self.sx, self.sy)
         sxx = sum(x * x for x, _ in points)
         syy = sum(y * y for _, y in points)
+        if sxx == 0.0 and self.M_B != 0.0:
+            raise PileError("err_seismic_moment", axis="B")
+        if syy == 0.0 and self.M_L != 0.0:
+            raise PileError("err_seismic_moment", axis="L")
         out = []
         for x, y in points:
             P = self.V_E / self.n
@@ -392,7 +408,8 @@ class PileAnalysis:
         return {"Bg": Bg, "Lg": Lg, "Qs": side, "W": W, "T_ult": side + W,
                 "T_all": side / self.FS_E_t + W}
 
-    def seismic(self, L: float, shaft: dict, Q_net: float) -> Dict[str, Any]:
+    def seismic(self, L: float, shaft: dict, Q_net: float,
+                Qg_net: float) -> Dict[str, Any]:
         """The seismic checks for a pile of length L."""
         loads = self.pile_loads()
         P_max = max(p["P"] for p in loads)
@@ -412,6 +429,16 @@ class PileAnalysis:
             "FS": up["Qs"] / pull if pull > 0 else float("inf"),
             "utilisation": T / up["T_all"] if up["T_all"] > 0 else float("inf"),
         }
+        group_compression = None
+        if self.n > 1:
+            P_group = max(self.V_E, 0.0)
+            Qg_all = Qg_net / self.FS_E_c
+            group_compression = {
+                "P": P_group, "Q_all": Qg_all, "allowable": self.FS_E_c,
+                "FS": Qg_net / P_group if P_group > 0 else float("inf"),
+                "utilisation": P_group / Qg_all if P_group > 0 and Qg_all > 0
+                else (0.0 if P_group <= 0 else float("inf")),
+            }
         group = None
         if self.V_E < 0 and self.n > 1:
             b = self.block_uplift(L, shaft)
@@ -421,9 +448,11 @@ class PileAnalysis:
                      "FS": b["Qs"] / pull_g if pull_g > 0 else float("inf"),
                      "utilisation": T_g / b["T_all"] if b["T_all"] > 0 else float("inf")}
         worst = max(compression["utilisation"], tension["utilisation"],
+                    group_compression["utilisation"] if group_compression else 0.0,
                     group["utilisation"] if group else 0.0)
         return {"loads": loads, "P_max": P_max, "P_min": P_min, "compression": compression,
-                "tension": tension, "group": group, "utilisation": worst}
+                "tension": tension, "group_compression": group_compression,
+                "group": group, "utilisation": worst}
 
     # ------------------------------------------------------------------ one length
     def evaluate(self, L: float) -> Dict[str, Any]:
@@ -459,7 +488,7 @@ class PileAnalysis:
             Qg_ult, governing = Q_eff, "efficiency"
         Qg_net = Qg_ult - self.n * W_used
         Qg_all = Qg_net / self.FS
-        seismic = self.seismic(L, shaft, Q_net) if self.seismic_on else None
+        seismic = self.seismic(L, shaft, Q_net, Qg_net) if self.seismic_on else None
         return {
             "seismic": seismic,
             "L": L, "z_tip": self.top + L, "shaft": shaft, "base": base,
@@ -476,7 +505,7 @@ class PileAnalysis:
         }
 
     # ------------------------------------------------------------------ settlement
-    def _settlement(self, ev: dict) -> Dict[str, Any]:
+    def _settlement(self, ev: dict, *, emit_warnings: bool = True) -> Dict[str, Any]:
         L = ev["L"]
         z_tip = ev["z_tip"]
         tip_layer = self.profile.layer_at(z_tip)
@@ -492,7 +521,7 @@ class PileAnalysis:
         shortening = ev["Q_pile"] * self.raft_fraction * L / (self.area * 1000.0 * self.Ep)
         raft["shortening"] = shortening
         raft["total"] = raft["s"] + shortening
-        if raft["reached_bottom"]:
+        if emit_warnings and raft["reached_bottom"]:
             self.warnings.append(message("warn_raft_bottom", depth=self.profile.depth))
         vesic = stl.vesic_group(single["s"], Bg, self.D)
 
@@ -505,34 +534,39 @@ class PileAnalysis:
                   "meyerhof": meyerhof["s"] if meyerhof else float("nan")}
         method = self.group_settlement
         if not math.isfinite(values[method]):
-            self.warnings.append(message("warn_meyerhof_settlement"))
+            if emit_warnings:
+                self.warnings.append(message("warn_meyerhof_settlement"))
             method = "raft"
         s = values[method]
+        utilisation = s * 1000.0 / self.s_allow
         return {"single": single, "raft": raft, "vesic": vesic, "meyerhof": meyerhof,
                 "values": values, "method": method, "s": s, "Bg": Bg, "Lg": Lg,
-                "status": "OK" if s * 1000.0 <= self.s_allow + 1e-9 else "NOT OK"}
+                "utilisation": utilisation,
+                "status": "OK" if math.isfinite(utilisation)
+                and utilisation <= 1.0 + 1e-9 else "NOT OK"}
 
     # ------------------------------------------------------------------ length
     def length_curve(self) -> List[Dict[str, float]]:
-        """Capacity against pile length, from the shortest trial to the profile's foot."""
+        """Capacity and settlement at every admissible whole-metre length.
+
+        A longer pile can enter a weaker layer, so rounding a fractional
+        passing candidate is insufficient: each recommended geometry must
+        independently pass every check. Fractional entered lengths remain
+        valid for ``evaluate`` and ``run``.
+        """
         L_max = self.profile.depth - self.top
-        lengths = []
-        L = self.L_min
-        while L <= L_max + 1e-9:
-            lengths.append(L)
-            L += self.L_step
-        if not lengths or abs(lengths[-1] - L_max) > 1e-6:
-            lengths.append(L_max)
+        lengths = range(math.ceil(self.L_min), math.floor(L_max) + 1)
         out = []
         for L in lengths:
-            if L <= 0:
-                continue
             ev = self.evaluate(L)
+            settlement = self._settlement(ev, emit_warnings=False)
             out.append({"L": L, "Qs": ev["Qs"], "Qb": ev["Qb"], "W": ev["W_used"],
                         "Q_ult": ev["Q_ult"], "Q_ult_net": ev["Q_ult_net"],
                         "Q_all": ev["Q_all"], "Qg_all": ev["group"]["Q_all"],
                         "utilisation": ev["utilisation"],
                         "utilisation_group": ev["group"]["utilisation"],
+                        "settlement": settlement["s"],
+                        "utilisation_settlement": settlement["utilisation"],
                         "utilisation_seismic": ev["seismic"]["utilisation"]
                         if ev["seismic"] else 0.0,
                         "T_all": ev["seismic"]["tension"]["T_all"]
@@ -541,10 +575,16 @@ class PileAnalysis:
 
     @staticmethod
     def required_length(curve: List[Dict[str, float]]) -> float:
-        """The shortest length on the curve that passes every check."""
-        for point in curve:
-            if max(point["utilisation"], point["utilisation_group"],
-                   point.get("utilisation_seismic", 0.0)) <= 1.0 + 1e-9:
+        """The shortest evaluated whole-metre length passing all limit states."""
+        for point in sorted(curve, key=lambda item: item["L"]):
+            length = float(point["L"])
+            if not math.isfinite(length) or length <= 0 or not length.is_integer():
+                continue
+            utilisations = (point["utilisation"], point["utilisation_group"],
+                            point.get("utilisation_settlement", float("inf")),
+                            point.get("utilisation_seismic", 0.0))
+            if all(math.isfinite(value) and 0.0 <= value <= 1.0 + 1e-9
+                   for value in utilisations):
                 return point["L"]
         return float("nan")
 
@@ -584,8 +624,6 @@ class PileAnalysis:
                 layer["behaviour"] == "granular"
                 for layer, _, _ in self.profile.segments(self.top, z_tip)):
             self.warnings.append(message("warn_critical_depth", zc=self.zc))
-        if self.seismic_on and self.n == 1 and (self.M_B or self.M_L):
-            self.warnings.append(message("warn_seismic_single_moment"))
         if self.seismic_on and ev["seismic"]["tension"]["n"]:
             self.warnings.append(message("warn_seismic_tension",
                                          n=ev["seismic"]["tension"]["n"],
@@ -595,6 +633,7 @@ class PileAnalysis:
     def run(self, with_length: bool = True) -> Dict[str, Any]:
         """The whole analysis. `with_length` off leaves the length search out,
         which is what the optimizer's trial designs need."""
+        self.warnings = []
         ev = self.evaluate(self.L)
         self._check_inputs(ev)
         settlement = self._settlement(ev)
@@ -622,11 +661,13 @@ class PileAnalysis:
                           "status": status(ev["group"]["utilisation"]),
                           "utilisation": ev["group"]["utilisation"]},
                 "settlement": {"actual": settlement["s"] * 1000.0,
-                               "allowable": self.s_allow, "status": settlement["status"]},
+                               "allowable": self.s_allow, "status": settlement["status"],
+                               "utilisation": settlement["utilisation"]},
             },
             "seismic_on": self.seismic_on,
             "settlement": settlement,
             "length_curve": curve, "required_length": L_req,
+            "length_search_performed": bool(with_length),
             "layers": self._layer_table(),
             "warnings": self.warnings,
         }
@@ -641,6 +682,12 @@ class PileAnalysis:
                 "actual": t["FS"], "allowable": t["allowable"],
                 "status": "N/A" if t["T"] <= 0 else status(t["utilisation"]),
                 "utilisation": t["utilisation"]}
+            if seismic["group_compression"] is not None:
+                g = seismic["group_compression"]
+                checks["seismic_group_compression"] = {
+                    "actual": g["FS"], "allowable": g["allowable"],
+                    "status": "N/A" if g["P"] <= 0 else status(g["utilisation"]),
+                    "utilisation": g["utilisation"]}
             if seismic["group"]:
                 g = seismic["group"]
                 checks["seismic_group_tension"] = {
@@ -662,7 +709,7 @@ class PileAnalysis:
 
 
 def analyse(config: Dict[str, Any], with_length: bool = True) -> PileAnalysis:
-    """Build and run a pile analysis in one call."""
-    analysis = PileAnalysis(config)
-    analysis.run(with_length=with_length)
-    return analysis
+    """Dispatch the public analysis, including socket and borehole envelopes."""
+    from .analysis import analyse as analyse_project
+
+    return analyse_project(config, with_length=with_length)

@@ -37,13 +37,116 @@ def _row(first: str, values, width: int = 28, cell: int = 13) -> str:
     return f"  {first:<{width}}" + "".join(f"{v:>{cell}}" for v in values)
 
 
+def _check_label(key: str) -> str:
+    return {
+        "pile": "Single-pile capacity", "group": "Group capacity",
+        "capacity": "Socket capacity", "min_length": "Minimum socket length",
+        "settlement": "Settlement", "seismic_compression": "Seismic compression",
+        "seismic_group_compression": "Seismic group compression",
+        "seismic_tension": "Seismic uplift", "seismic_group_tension": "Seismic block uplift",
+        "shared_design": "Common design",
+    }.get(key, key.replace("_", " "))
+
+
+def _check_line(key: str, check: dict, *, governing: bool = False) -> str:
+    """One complete check; never combine demand from one log with another's limit."""
+    status = status_text(L, check["status"])[0]
+    actual, limit = _num(check.get("actual"), 2), _num(check.get("allowable"), 2)
+    unit = " mm" if key == "settlement" else " m" if key == "min_length" else \
+        " kN" if key == "capacity" else ""
+    relation = "minimum" if key == "min_length" or key in {
+        "pile", "group", "seismic_compression", "seismic_group_compression",
+        "seismic_tension", "seismic_group_tension",
+    } else "maximum"
+    line = (f"  {_check_label(key)}: {actual}{unit} ({relation} {limit}{unit}); "
+            f"utilisation = {_num(check.get('utilisation'), 3)} — {status}")
+    if governing:
+        line += f"; governing borehole: {check.get('governing_borehole') or '—'}"
+    return line
+
+
+def borehole_text(analysis) -> str:
+    """Common geometry and controlling checks, followed by separate log results."""
+    res = analysis.results
+    is_socket = res["pile_type"] == "socket"
+    has_checked_geometry = not is_socket or bool(res["checked_socket_lengths"])
+    geometry = (f"Checked common geometry: D = {res['D']:.2f} m, L = {res['L']:.2f} m"
+                if has_checked_geometry else
+                f"No checked common geometry is available; D = {res['D']:.2f} m.")
+    lines = ["BOREHOLE ENVELOPE", "-" * 84,
+             geometry,
+             f"Independent boreholes: {len(analysis.analyses)}; soil profiles are not combined."]
+    if is_socket:
+        lines.append("L is the common total head-to-tip pile length. Each borehole has its own "
+                     "rock embedment Ls = L minus the overburden length; Ls may be fractional.")
+    lines += ["", "CHECKS AT THE CHECKED COMMON GEOMETRY"]
+    lines.extend(_check_line(key, check, governing=True)
+                 for key, check in res["checks"].items())
+    lines.append(f"  Overall: {status_text(L, res['status'])[0]}")
+    required = res["required_length"]
+    lines += ["", "COMMON RECOMMENDATION"]
+    if math.isfinite(required):
+        lines.append(f"  Recommended whole-metre L = {required:.0f} m; "
+                     "every active check was re-evaluated in every borehole at this length.")
+        if res.get("design_checks"):
+            lines.extend(_check_line(key, check, governing=True)
+                         for key, check in res["design_checks"].items())
+    elif not res.get("length_search_performed", True):
+        lines.append("  Length search was not requested; no common length recommendation is available.")
+    else:
+        lines.append("  No verified common whole-metre length was found within the search bounds.")
+    if is_socket:
+        lines += ["", "SOCKET GEOMETRY BY BOREHOLE",
+                  "Checked columns refer to the entered or automatically selected common geometry; "
+                  "design columns refer to the common recommendation.",
+                  _row("Borehole", ["Overburden (m)", "Checked Ls (m)", "Checked L (m)",
+                                     "Design Ls (m)", "Design L (m)"], 28, 17)]
+        checked_lengths = res["checked_socket_lengths"]
+        design_lengths = res.get("design_socket_lengths") or {}
+        for name, child in analysis.analyses.items():
+            lines.append(_row(name, [_num(child.results["overburden"], 2),
+                                     _num(checked_lengths.get(name), 2),
+                                     _num(res["L"] if has_checked_geometry else None, 2),
+                                     _num(design_lengths.get(name), 2),
+                                     _num(required, 0)], 28, 17))
+    lines += ["", "INDEPENDENT BOREHOLE RESULTS",
+              ("Each log below is evaluated at the checked common geometry. "
+               if has_checked_geometry else "No common checked geometry was established. ") +
+              "Any log-specific recommendation does not replace the common recommendation above."]
+    for name, child in analysis.analyses.items():
+        lines += ["", f"BOREHOLE: {name}",
+                  socket_text(child, log_only=True) if is_socket else results_text(child)]
+    return "\n".join(lines)
+
+
+def borehole_headline(analysis) -> str:
+    res = analysis.results
+    status = status_text(L, res["status"])[0]
+    required = res["required_length"]
+    recommendation = (f" · common Ldesign = {required:.0f} m"
+                      if math.isfinite(required) else "")
+    governing = res.get("governing_borehole") or "—"
+    basis = " total head-to-tip" if res["pile_type"] == "socket" else ""
+    geometry = ("checked common L unavailable"
+                if res["pile_type"] == "socket" and not res["checked_socket_lengths"] else
+                f"checked L = {res['L']:.2f} m{basis}")
+    return (f"{len(analysis.analyses)} boreholes · {geometry} · "
+            f"{L['card_checks']}: {status} · governing borehole: {governing} "
+            f"({_check_label(res.get('governing_check') or 'checks')}, "
+            f"u = {_num(res['utilisation'], 3)}){recommendation}")
+
+
 # --------------------------------------------------------------------------- #
 #  Pile
 # --------------------------------------------------------------------------- #
 
 def results_text(analysis) -> str:
-    """The whole pile analysis as text, in the chosen language."""
+    """The complete soil, socket or independent-borehole analysis as text."""
     a, res = analysis, analysis.results
+    if res.get("envelope"):
+        return borehole_text(analysis)
+    if "Ls_check" in res:
+        return socket_text(analysis)
     lines = [L["res_title"], "-" * 84]
     lines.append(L["res_pile"].format(shape=L["shape_" + a.shape], D=a.D, L=a.L, top=a.top,
                                       tip=res["z_tip"],
@@ -51,7 +154,8 @@ def results_text(analysis) -> str:
     lines.append(L["res_area"].format(A=res["A"], p=res["perimeter"]))
     lines.append(L["res_group"].format(nx=a.nx, ny=a.ny, n=a.n, sx=a.sx, sy=a.sy, Q=a.Q,
                                        Qp=res["Q_pile"]))
-    lines.append(L["res_water"].format(zw=a.profile.zw))
+    lines.append(L["res_water"].format(zw=a.profile.zw) if math.isfinite(a.profile.zw)
+                 else "No water table: dry-ground assumption.")
     if math.isfinite(res["zc"]):
         lines.append(L["res_zc"].format(zc=res["zc"], ratio=a.zc_ratio))
     lines.append(L["res_K"].format(K=a.K_ratio, delta=a.delta_ratio))
@@ -157,7 +261,8 @@ def results_text(analysis) -> str:
     c = checks["settlement"]
     lines.append("  " + L["res_check_settlement"].format(
         actual=c["actual"], allowable=c["allowable"], status=status_text(L, c["status"])[0]))
-    for key in ("seismic_compression", "seismic_tension", "seismic_group_tension"):
+    for key in ("seismic_compression", "seismic_group_compression",
+                "seismic_tension", "seismic_group_tension"):
         if key in checks and checks[key]["status"] != "N/A":
             c = checks[key]
             lines.append("  " + L[f"res_check_{key}"].format(
@@ -165,9 +270,13 @@ def results_text(analysis) -> str:
                 status=status_text(L, c["status"])[0]))
 
     length = res["required_length"]
-    lines += ["", ("  " + L["res_required_length"].format(L=length, z=a.top + length))
-              if math.isfinite(length)
-              else ("  " + L["res_no_length"].format(hi=a.profile.depth - a.top))]
+    if math.isfinite(length):
+        length_text = L["res_required_length"].format(L=length, z=a.top + length)
+    elif not res.get("length_search_performed", True):
+        length_text = "Length search was not requested; no length recommendation is available."
+    else:
+        length_text = L["res_no_length"].format(hi=a.profile.depth - a.top)
+    lines += ["", "  " + length_text]
 
     lines += ["", L["res_layers_title"],
               _row(L["head_layer"], [L["head_depth"], L["col_gamma"], L["col_phi"],
@@ -193,10 +302,14 @@ def warnings(analysis) -> List[str]:
 def headline(analysis) -> str:
     """One line for the status bar: the capacity, the checks and the length."""
     res = analysis.results
+    if res.get("envelope"):
+        return borehole_headline(analysis)
+    if "Ls_check" in res:
+        return socket_headline(analysis)
     status, _ = status_text(L, "OK" if all(c["status"] in ("OK", "N/A")
                                            for c in res["checks"].values()) else "NOT OK")
     length = res["required_length"]
-    tail = f" · L ≥ {length:.2f} m" if math.isfinite(length) else ""
+    tail = f" · Ldesign = {length:.0f} m" if math.isfinite(length) else ""
     return (f"Qult,net = {res['Q_ult_net']:,.0f} kN · FS = {res['FS']:.2f} · "
             f"{L['card_checks']}: {status}{tail}")
 
@@ -205,10 +318,15 @@ def headline(analysis) -> str:
 #  Rock socket
 # --------------------------------------------------------------------------- #
 
-def socket_text(socket) -> str:
+def socket_text(socket, *, log_only: bool = False) -> str:
     """The rock socket as text."""
     s, res = socket, socket.results
+    if res.get("envelope"):
+        return borehole_text(socket)
     lines = [L["sock_title"], "-" * 84]
+    if log_only:
+        lines.append("Independent log-only socket recommendations below apply to this borehole. "
+                     "Use the common total L above for the shared design.")
     lines.append(L["sock_geometry"].format(D=s.D, top=s.top, rock=s.rock_depth,
                                            Lo=res["overburden"], Ls=res["Ls_check"], Q=s.Q))
     m = res["modulus"]
@@ -220,14 +338,15 @@ def socket_text(socket) -> str:
         lines.append(L["sock_overburden"].format(Qs=res["Qs_soil"]))
 
     lines += ["", L["sock_side_title"],
-              _row(L["head_correlation"], [L["head_fs"], L["head_Ls_req"], L["head_Q_all"]],
+              _row(L["head_correlation"], [L["head_fs"],
+                   "Log-only Ls (m)" if log_only else L["head_Ls_req"], L["head_Q_all"]],
                    34, 17)]
     for key in SOCKET_SIDE_METHODS:
         e = res["side"][key]
         mark = "" if e["in_range"] else " †"
         star = " *" if key == res["design"] else ""
         lines.append(_row((L[f"side_{key}"] + star + mark)[:34],
-                          [f"{e['fs']:,.0f}", _num(e["Ls_req"], 2), f"{e['Q_all']:,.0f}"],
+                          [f"{e['fs']:,.0f}", _num(e["Ls_design"], 0), f"{e['Q_all']:,.0f}"],
                           34, 17))
     st = res["stats"]
     lines.append("  " + L["sock_stats"].format(n=st["n"], mean=st["mean"], median=st["median"],
@@ -245,15 +364,19 @@ def socket_text(socket) -> str:
     lines += ["", L["sock_design_title"]]
     lines.append("  " + L["sock_design"].format(fs=res["fs_design"], qb=res["qb_design"] / 1000,
                                                 FSs=s.FS_side, FSb=s.FS_base))
-    if math.isfinite(res["Ls_req"]):
-        lines.append("  " + L["sock_length"].format(Ls=res["Ls_req"], mn=res["Ls_min"],
-                                                    Ld=res["Ls_design"]))
+    if math.isfinite(res["Ls_design"]):
+        label = "Independent log-only whole-metre Ls" if log_only else "Recommended whole-metre Ls"
+        lines.append(f"  {label} = {res['Ls_design']:.0f} m; "
+                     "capacity, minimum length and settlement rechecked at this geometry.")
+        lines.append(f"  Continuous capacity-only diagnostic Ls = {_num(res['Ls_req'], 2)} m; "
+                     f"geometric minimum = {_num(res['Ls_min'], 2)} m.")
     else:
         lines.append("  " + L["sock_no_length"])
     lines.append("  " + L["sock_check"].format(Ls=res["Ls_check"], Qs=c["Qs"], Qb=c["Qb"],
                                                W=c["W"], Qa=c["Q_all"], Q=s.Q,
                                                u=c["utilisation"],
                                                status=status_text(L, c["status"])[0]))
+    lines.extend(_check_line(key, check) for key, check in res["checks"].items())
 
     st = res["settlement"]
     lines += ["", L["sock_settlement_title"].format(Ls=st["Ls"])]
@@ -262,6 +385,9 @@ def socket_text(socket) -> str:
                                             share=100 * st["rw"]["base_share"]))
     lines.append("  " + L["sock_rw_side"].format(s=1000 * st["rw_side"]["total"]))
     lines.append("  " + L["sock_vesic"].format(s=1000 * st["vesic"]["total"]))
+    selected = L["plot_rw_side"] if st["method"] == "rw_side" else L["plot_rw"]
+    lines.append(f"  Selected settlement ({selected}): {1000 * st['s']:.1f} mm — "
+                 f"{status_text(L, st['status'])[0]}")
 
     if res["warnings"]:
         lines += ["", L["warnings_title"]]
@@ -271,8 +397,11 @@ def socket_text(socket) -> str:
 
 def socket_headline(socket) -> str:
     res = socket.results
+    if res.get("envelope"):
+        return borehole_headline(socket)
     length = res["Ls_design"]
     status, _ = status_text(L, res["check"]["status"])
-    head = f"Ls ≥ {length:.2f} m" if math.isfinite(length) else L["card_none"]
-    return (f"{head} · fs = {res['fs_design']:,.0f} kPa · {L['card_checks']}: {status} · "
-            f"s = {1000 * res['settlement']['rw']['total']:.1f} mm")
+    head = f"Ls design = {length:.0f} m" if math.isfinite(length) else L["card_none"]
+    return (f"{head} · checked Ls = {res['Ls_check']:.2f} m · "
+            f"fs = {res['fs_design']:,.0f} kPa · {L['card_checks']}: {status} · "
+            f"s = {1000 * res['settlement']['s']:.1f} mm")

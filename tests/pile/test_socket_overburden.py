@@ -21,7 +21,8 @@ def test_the_overburden_is_left_out_by_default():
 def test_counting_the_overburden_adds_friction_and_shortens_the_socket():
     none, soil = _socket(), _socket(overburden_friction="soil")
     assert soil["Qs_soil"] > 0
-    assert soil["Ls_design"] < none["Ls_design"]
+    assert soil["Ls_req_continuous"] < none["Ls_req_continuous"]
+    assert soil["Ls_design"] <= none["Ls_design"]  # rounding can give equal whole metres
     # the soil friction takes FS_side = 2.5, at the length both cases check
     at_checked = _socket(overburden_friction="soil", Ls=4.0)["check"]["Q_all"]
     assert at_checked == pytest.approx(_socket(Ls=4.0)["check"]["Q_all"]

@@ -102,11 +102,12 @@ class _Base:
         self.res = analysis.results
         self.L = TEXTS
         self.titles = titles
+        self.title_prefix = ""
 
     def _title(self, fig, th, key: str, extra: str = "") -> None:
         if not self.titles:
             return
-        fig.suptitle(f"{self.L.get(f'fig_{key}', key)}{extra}", fontfamily=TITLE_FONT,
+        fig.suptitle(f"{self.title_prefix}{self.L.get(f'fig_{key}', key)}{extra}", fontfamily=TITLE_FONT,
                      fontsize=12.5, color=th["fg"])
 
     def _method(self, key: str) -> str:
@@ -114,11 +115,33 @@ class _Base:
 
 
 class Plotter(_Base):
-    """Draws the figures of one finished `PileAnalysis`."""
+    """Draw a soil/socket result or a named child of a borehole envelope.
+
+    Envelope keys use ``log0:section``, ``log1:socket_section``, etc., in the
+    order of ``analysis.analyses``. Each child figure retains its own profile
+    and includes the borehole name in the title.
+    """
 
     keys = PLOT_KEYS
 
+    def __init__(self, analysis, titles: bool = True):
+        super().__init__(analysis, titles=titles)
+        self.keys = available_figures(analysis)
+
     def draw(self, key: str, fig: Figure) -> None:
+        if self.res.get("envelope"):
+            if key not in self.keys:
+                raise ValueError(f"unknown figure: {key}; select a borehole-prefixed key")
+            prefix, child_key = key.split(":", 1)
+            index = int(prefix[3:])
+            name, child = list(self.a.analyses.items())[index]
+            plotter = Plotter(child, titles=self.titles)
+            plotter.title_prefix = f"{name} — "
+            return plotter.draw(child_key, fig)
+        if "Ls_check" in self.res:
+            plotter = SocketPlotter(self.a, titles=self.titles)
+            plotter.title_prefix = self.title_prefix
+            return plotter.draw(key, fig)
         if key not in PLOT_KEYS:
             raise ValueError(f"unknown figure: {key}")
         getattr(self, f"_draw_{key}")(fig)
@@ -352,7 +375,7 @@ class Plotter(_Base):
         required = res["required_length"]
         if math.isfinite(required):
             ax.axvline(required, color=PLOT_PALETTE["design"], linewidth=1.4)
-            ax.annotate(self.L["plot_required"].format(L=required),
+            ax.annotate(f"Recommended L = {required:.0f} m",
                         xy=(required, res["Q_pile"]), xytext=(10, 18),
                         textcoords="offset points", fontsize=8.5, color=th["fg"],
                         bbox=label_box(th),
@@ -553,6 +576,12 @@ class Plotter(_Base):
         ax2.set_ylabel(f"{self.L['plot_pile_force']} (kN)", fontsize=9)
         span = max(comp["Q_all"], tens["T_all"], top) * 1.3
         ax2.set_ylim(-span, span)
+        group = seismic.get("group_compression")
+        if group is not None and group["P"] > 0:
+            group_status = res["checks"]["seismic_group_compression"]["status"]
+            ax2.set_title(f"Group compression: u = {group['utilisation']:.2f} — {group_status}",
+                          fontsize=9, color=PLOT_PALETTE["applied"]
+                          if group_status != "OK" else th["fg"])
         _legend(ax2, th, loc="lower right")
         self._title(fig, th, "seismic")
         fig.tight_layout(rect=(0, 0, 1, 0.94))
@@ -668,7 +697,7 @@ class SocketPlotter(_Base):
             z_d = s.rock_depth + Ls_design
             ax.plot([-D * 0.9, x_dim + 0.1], [z_d, z_d], color=PLOT_PALETTE["design"],
                     linewidth=1.6, linestyle="--", zorder=8)
-            ax.text(x_dim + 0.15, z_d, f"{self.L['plot_ls_design']} = {Ls_design:.2f} m",
+            ax.text(x_dim + 0.15, z_d, f"{self.L['plot_ls_design']} = {Ls_design:.0f} m",
                     fontsize=8, va="top" if Ls_design >= Ls else "bottom",
                     color=PLOT_PALETTE["design"], zorder=8)
         ax.text(half * 0.97, s.rock_depth,
@@ -689,7 +718,7 @@ class SocketPlotter(_Base):
         pool = inside or [v for v in values.values() if math.isfinite(v)]
         return max(pool + [v for v in extra if math.isfinite(v)] + [1e-9]) * 1.25
 
-    def _hbar(self, ax, th, values, design_key, x_max=None):
+    def _hbar(self, ax, th, values, design_key, x_max=None, *, decimals=None):
         side = self.res["side"]
         y = np.arange(len(SOCKET_SIDE_METHODS))
         for index, key in enumerate(SOCKET_SIDE_METHODS):
@@ -702,7 +731,8 @@ class SocketPlotter(_Base):
                     color=PLOT_PALETTE["ultimate"] if key == design_key else PLOT_PALETTE["shaft"],
                     alpha=1.0 if in_range else 0.3, hatch=None if in_range else "//",
                     edgecolor=th["panel"])
-            text = f" {value:,.2f}" if value < 100 else f" {value:,.0f}"
+            nd = decimals if decimals is not None else (2 if value < 100 else 0)
+            text = f" {value:,.{nd}f}"
             if x_max and value > x_max:
                 ax.text(shown, y[index], text + " »", va="center", ha="right", fontsize=8,
                         color=th["fg"], fontweight="bold")
@@ -739,22 +769,21 @@ class SocketPlotter(_Base):
         res = self.res
         ax = fig.add_subplot(111)
         style_axis(ax, th, axis="x")
-        values = {key: res["side"][key]["Ls_req"] for key in SOCKET_SIDE_METHODS}
+        values = {key: res["side"][key]["Ls_design"] for key in SOCKET_SIDE_METHODS}
         x_max = self._scale(values, [res["Ls"], res["Ls_design"], 1.0])
-        self._hbar(ax, th, values, res["design"], x_max)
+        self._hbar(ax, th, values, res["design"], x_max, decimals=0)
         handles = []
         if math.isfinite(res["Ls_design"]):
             ax.axvline(res["Ls_design"], color=PLOT_PALETTE["design"], linewidth=1.6)
             handles.append(Line2D([0], [0], color=PLOT_PALETTE["design"], linewidth=1.6,
-                                  label=self.L["plot_design_length"].format(
-                                      Ls=res["Ls_design"])))
+                                  label=f"Recommended Ls = {res['Ls_design']:.0f} m"))
         if res["Ls"] > 0:
             ax.axvline(res["Ls"], color=PLOT_PALETTE["applied"], linestyle="--", linewidth=1.4)
             handles.append(Line2D([0], [0], color=PLOT_PALETTE["applied"], linestyle="--",
                                   linewidth=1.4,
                                   label=self.L["plot_checked_length"].format(Ls=res["Ls"])))
         ax.set_xlim(0, x_max)
-        ax.set_xlabel("Ls (m)", fontsize=9)
+        ax.set_xlabel("Recommended whole-metre Ls (m)", fontsize=9)
         if handles:
             _legend(ax, th, handles=handles, loc="lower right")
         self._title(fig, th, "socket_length", f" — Q = {res['Q']:,.0f} kN")
@@ -769,17 +798,22 @@ class SocketPlotter(_Base):
         ax = fig.add_subplot(111)
         style_axis(ax, th)
         Ls = [p["Ls"] for p in curve]
+        current = res["settlement"]
+        selected = current["method"]
         ax.plot(Ls, [1000 * p["rw"] for p in curve], color=PLOT_PALETTE["ultimate"],
-                linewidth=2.2, label=self.L["plot_rw"])
+                linewidth=2.4 if selected == "rw" else 1.3,
+                label=self.L["plot_rw"] + (" (selected)" if selected == "rw" else ""))
         ax.plot(Ls, [1000 * p["rw_side"] for p in curve], color=PLOT_PALETTE["shaft"],
-                linewidth=1.6, linestyle="--", label=self.L["plot_rw_side"])
+                linewidth=2.4 if selected == "rw_side" else 1.3, linestyle="--",
+                label=self.L["plot_rw_side"] + (" (selected)" if selected == "rw_side" else ""))
         ax.plot(Ls, [1000 * p["vesic"] for p in curve], color=PLOT_PALETTE["design"],
                 linewidth=1.6, linestyle="-.", label=self.L["plot_vesic_socket"])
-        current = res["settlement"]
-        ax.scatter([current["Ls"]], [1000 * current["rw"]["total"]], s=50,
+        ax.axhline(s.s_allow, color=PLOT_PALETTE["limit"], linestyle=":", linewidth=1.2,
+                   label=f"Allowed settlement = {s.s_allow:g} mm")
+        ax.scatter([current["Ls"]], [1000 * current["s"]], s=50,
                    color=PLOT_PALETTE["applied"], zorder=6, edgecolor=th["panel"])
-        ax.annotate(f"{1000 * current['rw']['total']:.1f} mm", xy=(current["Ls"],
-                    1000 * current["rw"]["total"]), xytext=(10, 12),
+        ax.annotate(f"{1000 * current['s']:.1f} mm ({current['status']})", xy=(current["Ls"],
+                    1000 * current["s"]), xytext=(10, 12),
                     textcoords="offset points", fontsize=8.5, color=th["fg"],
                     bbox=label_box(th),
                     arrowprops=dict(arrowstyle="-", color=th["fg_dim"], lw=0.8))
@@ -793,8 +827,16 @@ class SocketPlotter(_Base):
 
 
 def available_figures(analysis=None) -> list:
-    """The figures that can be drawn for the analysis just run: the seismic
-    one only when the earthquake is on."""
+    """Figures for soil, socket or independent boreholes at the checked geometry.
+
+    Envelope entries are ``log{index}:{key}``, with zero-based indices in
+    ``analysis.analyses`` order. No mixed or synthetic soil profile is drawn.
+    """
+    if analysis is not None and analysis.results.get("envelope"):
+        return [f"log{index}:{key}" for index, child in enumerate(analysis.analyses.values())
+                for key in available_figures(child)]
+    if analysis is not None and "Ls_check" in analysis.results:
+        return list(SOCKET_PLOT_KEYS)
     if analysis is not None and not analysis.results.get("seismic"):
         return [key for key in PLOT_KEYS if key != "seismic"]
     return list(PLOT_KEYS)
