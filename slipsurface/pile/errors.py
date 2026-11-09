@@ -11,8 +11,8 @@ class PileError(ValueError):
     def __init__(self, key: str, **params):
         self.key = key
         self.params = params
-        from .i18n import TRANSLATIONS
-        super().__init__(TRANSLATIONS["en"].get(key, key).format(**params))
+        from .texts import text
+        super().__init__(text(key, **params))
 
 
 def message(key: str, **params) -> Tuple[str, Dict[str, Any]]:

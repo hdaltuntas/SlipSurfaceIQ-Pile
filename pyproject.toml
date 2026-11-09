@@ -1,4 +1,57 @@
-# Development tooling only. Run the application exclusively via python main.py.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slipsurfaceiq-pile"
+dynamic = ["version"]
+description = "Axial capacity, group action and settlement of bored and driven piles, and rock-socketed piles"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Hasan Deniz Altuntaş" }]
+keywords = [
+    "geotechnical", "pile", "foundation", "bearing capacity", "settlement",
+    "rock socket", "pile group", "engineering",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Other Audience",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+# The analysis itself; figures and the PDF report are extras
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.7"]
+report = ["matplotlib>=3.7", "reportlab>=4.0"]
+all = ["slipsurfaceiq-pile[plot,report]"]
+
+[project.urls]
+Homepage = "https://github.com/hdaltuntas/SlipSurfaceIQ-Pile"
+Source = "https://github.com/hdaltuntas/SlipSurfaceIQ-Pile"
+Issues = "https://github.com/hdaltuntas/SlipSurfaceIQ-Pile/issues"
+
+# `slipsurface` is a namespace shared by the programs of the suite: this
+# distribution ships only `slipsurface.pile`, so others can install beside it.
+[tool.setuptools.packages.find]
+include = ["slipsurface.pile*"]
+namespaces = true
+
+[tool.setuptools.dynamic]
+version = { attr = "slipsurface.pile.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

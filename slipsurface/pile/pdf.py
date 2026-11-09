@@ -13,7 +13,7 @@ to its text.
 Fonts: the standard PDF fonts are Latin-1, which cannot spell Turkish (ı, ş,
 ğ) or the symbols an engineering report is full of (σ', γ, φ', Nγ). A Unicode
 TrueType font is registered instead — the DejaVu that comes with Matplotlib,
-which is a required dependency, so it is always there.
+which the [report] extra installs alongside reportlab.
 """
 
 from __future__ import annotations
@@ -24,23 +24,28 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple
 
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.units import mm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import (
-    Image,
-    KeepTogether,
-    PageBreak,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
+from ._optional import missing
+
+try:
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import (
+        Image,
+        KeepTogether,
+        PageBreak,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+except ImportError as exc:
+    raise missing("reportlab", "report") from exc
 
 #: Report colours: the interface's palette, as in the HTML stylesheet in report.py
 ACCENT = colors.HexColor("#C6613F")     # terracotta: section headings

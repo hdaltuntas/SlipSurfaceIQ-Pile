@@ -1,9 +1,0 @@
-{
-  "key": "pile",
-  "name": "Pile",
-  "group": "Foundations",
-  "description": "Axial capacity, group and socket assessment",
-  "version": "2026.0.0",
-  "requires_core": ">=0.1.0",
-  "order": 7
-}
