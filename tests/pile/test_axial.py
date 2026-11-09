@@ -55,18 +55,32 @@ def test_meyerhof_base_is_limited():
     assert deep["qb"] == pytest.approx(0.5 * PA * 56.7 * math.tan(math.radians(30.0)))
 
 
-def test_vesic_nq_without_rigidity_and_the_reduced_index():
-    phi = 30.0
-    p = math.radians(phi)
-    base = 3 / (3 - math.sin(p)) * math.exp((math.pi / 2 - p) * math.tan(p)) * \
-        math.tan(math.pi / 4 + p / 2) ** 2
-    assert axial.vesic_nq(phi, 1.0) == pytest.approx(base)
+def test_vesic_matches_the_published_usace_worked_example():
+    # USACE EM 1110-1-1905 (30 Oct 1992), printed p. 5-18, eqs. 5-5b/5-6a:
+    # phi=36 deg, Irr=42.6, sigma'_v=2.4 ksf -> Nsigma~60.7, qb~88.9 ksf.
+    # Source: https://www.publications.usace.army.mil/Portals/76/Publications/
+    # EngineerManuals/EM_1110-1-1905.pdf
+    # The published arithmetic rounds K0 to 0.42, its stress factor to 0.61
+    # and intermediate terms, hence the 1% tolerance on the final result.
+    assert axial.vesic_nsigma(36.0, 42.6) == pytest.approx(60.7, rel=0.003)
+    assert 2.4 * axial.vesic_nq(36.0, 42.6) == pytest.approx(88.9, rel=0.01)
+
+
+def test_vesic_exposes_mean_stress_and_the_reduced_index():
     got = axial.tip_vesic(100.0, 35.0, 50.0, 0.3)
     Ir = 50_000.0 / (2 * 1.3 * 100.0 * math.tan(math.radians(35.0)))
     delta = 0.005 * (1 - 10.0 / 20.0) * 100.0 / PA
     assert got["Ir"] == pytest.approx(Ir)
     assert got["Irr"] == pytest.approx(Ir / (1 + Ir * delta))
     assert got["qb"] == pytest.approx(100.0 * got["Nq"])
+    assert got["qb"] == pytest.approx(got["sigma_mean"] * got["Nsigma"])
+    assert got["K0"] == pytest.approx(0.42642356364895395)
+    assert got["mean_stress_factor"] == pytest.approx(0.6176157090993026)
+    assert got["qb"] == pytest.approx(6574.844001443853)
+    # At phi=30 deg K0=.5, so using vertical stress with Nsigma would
+    # overpredict the base resistance by 50%.
+    other = axial.tip_vesic(100.0, 30.0, 50.0, 0.3)
+    assert other["Nq"] / other["Nsigma"] == pytest.approx(2.0 / 3.0)
 
 
 def test_janbu_nq_and_its_undrained_limit():

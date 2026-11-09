@@ -1,61 +1,134 @@
-"""Automatic optimization for SlipSurfaceIQ Pile.
+"""Integer-metre pile design with every active engineering check enforced.
 
-Uses scipy.optimize.differential_evolution to find:
-- the shortest pile length that satisfies all checks (utilisation ≤ 1), or
-- a minimum-cost design (simple cost = a·L·D² + b·L, subject to safety).
-
-Length search in the engine is a linear scan; this is a global optimizer
-that can also vary diameter and is more efficient for multi-variable cases.
+The length-only search evaluates whole metres in ascending order. The cost
+search uses constrained differential evolution with an integer length and a
+continuous diameter. Feasibility is independent of the monetary units.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
-from scipy.optimize import differential_evolution
+from scipy.optimize import NonlinearConstraint, differential_evolution
 
-from .engine import PileAnalysis, PileError
+from .errors import PileError
+
+
+FEASIBILITY_TOL = 1e-9
 
 
 def governing_utilisation(res: Dict[str, Any]) -> float:
-    """The largest utilisation of the checks the engine's required length uses:
-    the single pile, the group, and the seismic compression when it is on."""
+    """Largest utilisation of all active checks, including settlement.
+
+    The public dispatcher supplies the envelope of independent borehole
+    analyses. Invalid or incomplete evaluations cannot become feasible.
+    """
+    if res.get("error"):
+        return float("inf")
+    checks = res.get("checks")
+    if "checks" in res:
+        if not isinstance(checks, dict) or not checks:
+            return float("inf")
+        values = []
+        for name, check in checks.items():
+            if not isinstance(check, dict):
+                return float("inf")
+            if check.get("status") == "N/A":
+                continue
+            if check.get("status") not in ("OK", "NOT OK"):
+                return float("inf")
+            if any(isinstance(check.get(key), (int, float)) and math.isnan(check[key])
+                   for key in ("actual", "allowable")):
+                return float("inf")
+            value = check.get("utilisation")
+            if value is None and name == "settlement":
+                allowable = check.get("allowable", 0.0)
+                actual = check.get("actual")
+                if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                           and math.isfinite(v) for v in (actual, allowable)):
+                    return float("inf")
+                value = actual / allowable if allowable > 0 else float("inf")
+            elif value is None:
+                return float("inf")
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return float("inf")
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                return float("inf")
+            if not math.isfinite(value) or value < 0:
+                return float("inf")
+            if check.get("status") == "NOT OK":
+                value = max(value, 1.0 + 2 * FEASIBILITY_TOL)
+            values.append(value)
+        return max(values, default=float("inf"))
+
+    # Compatibility for callers passing old capacity-only result dictionaries.
     group = res.get("group") if isinstance(res.get("group"), dict) else {}
     seismic = res.get("seismic") if isinstance(res.get("seismic"), dict) else {}
-    return max(res.get("utilisation", 1e6), group.get("utilisation", 1e6),
-               seismic.get("utilisation", 0.0))
+    values = [res.get("utilisation", float("inf")),
+              group.get("utilisation", float("inf")),
+              seismic.get("utilisation", 0.0)]
+    valid = all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isfinite(v) and v >= 0 for v in values)
+    return max(values) if valid else float("inf")
 
 
 class Cancelled(Exception):
     """The user stopped the optimisation."""
 
 
+def _check_cancelled(is_cancelled):
+    if is_cancelled is not None and is_cancelled():
+        raise Cancelled()
+
+
 def _callback(is_cancelled, progress, maxiter):
     state = {"it": 0}
 
     def callback(*_args, **_kwargs):
+        _check_cancelled(is_cancelled)
         state["it"] += 1
         if progress is not None:
             progress(min(state["it"], maxiter), maxiter)
-        return bool(is_cancelled is not None and is_cancelled())
+        return False
     return callback
 
 
 def _safe_evaluate(cfg: Dict[str, Any], L: float, D: Optional[float] = None) -> Dict[str, Any]:
-    """Run a single evaluation; return results or a penalty dict on failure."""
-    c = {**cfg}
-    c.setdefault("pile", {})
-    c["pile"] = {**c["pile"], "L": float(L)}
+    """Evaluate one geometry through the public, borehole-aware dispatcher."""
+    from .analysis import analyse
+
+    c = {**cfg, "pile": {**cfg.get("pile", {}), "L": float(L)}}
     if D is not None:
         c["pile"]["D"] = float(D)
     try:
-        analysis = PileAnalysis(c)
-        res = analysis.run(with_length=False)
-        return res
-    except (PileError, ValueError, ZeroDivisionError, KeyError) as exc:
-        return {"error": str(exc), "utilisation": 1e6, "utilisation_group": 1e6,
-                "settlement": {"s": 1e6}, "FS": 0.0}
+        return analyse(c, with_length=False).results
+    except (PileError, ValueError, ZeroDivisionError, KeyError, OverflowError) as exc:
+        return {"error": str(exc), "utilisation": float("inf"), "checks": {}, "FS": 0.0}
+
+
+def _prepare_config(base_config):
+    from .project import normalize
+
+    cfg = normalize(base_config)
+    if cfg.get("pile_type") == "socket":
+        raise ValueError(
+            "Soil-pile optimisation does not support rock sockets; use analyse_socket."
+        )
+    return cfg
+
+
+def _integer_bounds(bounds: Tuple[float, float]) -> Tuple[int, int]:
+    lo, hi = map(float, bounds)
+    if not all(math.isfinite(v) and v > 0 for v in (lo, hi)) or lo > hi:
+        raise ValueError("Length bounds must be finite, positive and increasing.")
+    lower, upper = math.ceil(lo), math.floor(hi)
+    if lower > upper:
+        raise ValueError("Length bounds contain no whole-metre candidate.")
+    return lower, upper
 
 
 def optimize_length(
@@ -72,47 +145,41 @@ def optimize_length(
     progress: Optional[Callable[[int, int], None]] = None,
     is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
-    """Find the shortest L that satisfies utilisation ≤ 1 (pile + group).
+    """Find the shortest feasible whole-metre length inside the given bounds.
 
-    Extra differential_evolution parameters are exposed for customisation.
+    All integer candidates are considered in order, so layered, non-monotonic
+    behaviour cannot be skipped. The historical differential-evolution
+    options remain accepted for source compatibility; only the cost search
+    uses them. Progress reports evaluated candidates / candidate count.
     """
-    def objective(x: np.ndarray) -> float:
-        L = float(x[0])
-        res = _safe_evaluate(base_config, L)
+    _check_cancelled(is_cancelled)
+    cfg = _prepare_config(base_config)
+    lo, hi = _integer_bounds(L_bounds)
+    best_L, best_util = lo, float("inf")
+    nfev = 0
+    for L in range(lo, hi + 1):
+        _check_cancelled(is_cancelled)
+        res = _safe_evaluate(cfg, L)
+        nfev += 1
         util = governing_utilisation(res)
-        # Penalise unsafe designs heavily; among safe ones minimise L
-        if util > 1.0 + 1e-6:
-            return 1000.0 + L + 100.0 * (util - 1.0)
-        return L
-
-    bounds = [L_bounds]
-    result = differential_evolution(
-        objective,
-        bounds,
-        popsize=popsize,
-        maxiter=maxiter,
-        seed=seed,
-        atol=atol,
-        tol=tol,
-        mutation=mutation,
-        recombination=recombination,
-        polish=polish,
-        workers=1,
-        callback=_callback(is_cancelled, progress, maxiter),
-    )
-    if is_cancelled is not None and is_cancelled():
-        raise Cancelled()
-    best_L = float(result.x[0])
-    best_res = _safe_evaluate(base_config, best_L)
-    util = governing_utilisation(best_res)
-    success = util <= 1.0 + 1e-4
+        if util < best_util or nfev == 1:
+            best_L, best_util = L, util
+        if progress is not None:
+            progress(nfev, hi - lo + 1)
+        if util <= 1.0 + FEASIBILITY_TOL:
+            best_L = L
+            break
+    _check_cancelled(is_cancelled)
+    # Always re-evaluate the actual integer geometry returned to the caller.
+    best_res = _safe_evaluate(cfg, best_L)
+    nfev += 1
+    success = governing_utilisation(best_res) <= 1.0 + FEASIBILITY_TOL
     return {
-        "best_L": best_L,
-        "best_results": best_res,
-        "success": success,
-        "fun": float(result.fun),
-        "nfev": result.nfev,
-        "message": "OK" if success else "No safe length found in bounds",
+        "best_L": float(best_L), "best_results": best_res,
+        "success": success, "feasible": success, "converged": True,
+        "fun": float(best_L), "nfev": nfev,
+        "message": "OK" if success else "No feasible whole-metre length in bounds",
+        "length_increment": 1.0,
     }
 
 
@@ -120,8 +187,8 @@ def optimize_cost(
     base_config: Dict[str, Any],
     L_bounds: Tuple[float, float] = (2.0, 40.0),
     D_bounds: Tuple[float, float] = (0.3, 1.5),
-    cost_a: float = 1.0,   # cost ~ a * L * D**2
-    cost_b: float = 0.1,   # + b * L
+    cost_a: float = 1.0,
+    cost_b: float = 0.1,
     popsize: int = 12,
     maxiter: int = 30,
     seed: Optional[int] = 42,
@@ -133,49 +200,62 @@ def optimize_cost(
     progress: Optional[Callable[[int, int], None]] = None,
     is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
-    """Minimise a simple cost subject to safety (utilisation ≤ 1).
+    """Minimise a·L·D² + b·L, with integer L and explicit safety constraints.
 
-    cost = cost_a * L * D**2 + cost_b * L
-    Extra differential_evolution parameters are exposed for customisation.
+    success/feasible report rechecked engineering feasibility; converged
+    independently reports numerical optimizer convergence. The normalized
+    objective makes a change of monetary units immaterial.
     """
-    def objective(x: np.ndarray) -> float:
-        L, D = float(x[0]), float(x[1])
-        res = _safe_evaluate(base_config, L, D)
-        util = governing_utilisation(res)
-        cost = cost_a * L * D ** 2 + cost_b * L
-        if util > 1.0 + 1e-6:
-            return 1000.0 + cost + 50.0 * (util - 1.0)
-        return cost
+    _check_cancelled(is_cancelled)
+    cfg = _prepare_config(base_config)
+    lo, hi = _integer_bounds(L_bounds)
+    dlo, dhi = map(float, D_bounds)
+    if not all(math.isfinite(v) and v > 0 for v in (dlo, dhi)) or dlo > dhi:
+        raise ValueError("Diameter bounds must be finite, positive and increasing.")
+    a, b = float(cost_a), float(cost_b)
+    if not all(math.isfinite(v) and v >= 0 for v in (a, b)) or max(a, b) <= 0:
+        raise ValueError("Cost coefficients must be finite, nonnegative, and not both zero.")
+    coefficient_scale = max(a, b)
+    an, bn = a / coefficient_scale, b / coefficient_scale
+    cost_scale = an * hi * dhi ** 2 + bn * hi
+    cache = {}
 
-    bounds = [L_bounds, D_bounds]
+    def evaluate(x):
+        _check_cancelled(is_cancelled)
+        key = (int(round(float(x[0]))), float(x[1]))
+        if key not in cache:
+            cache[key] = _safe_evaluate(cfg, *key)
+        return cache[key]
+
+    def objective(x: np.ndarray) -> float:
+        _check_cancelled(is_cancelled)
+        L, D = int(round(float(x[0]))), float(x[1])
+        return (an * L * D ** 2 + bn * L) / cost_scale
+
+    def constraint(x):
+        value = governing_utilisation(evaluate(x))
+        return value if math.isfinite(value) else 1e12
+
     result = differential_evolution(
-        objective,
-        bounds,
-        popsize=popsize,
-        maxiter=maxiter,
-        seed=seed,
-        atol=atol,
-        tol=tol,
-        mutation=mutation,
-        recombination=recombination,
-        polish=polish,
-        workers=1,
-        callback=_callback(is_cancelled, progress, maxiter),
+        objective, [(lo, hi), (dlo, dhi)], integrality=[True, False],
+        constraints=NonlinearConstraint(constraint, -np.inf, 1.0 + FEASIBILITY_TOL),
+        popsize=popsize, maxiter=maxiter, seed=seed, atol=atol, tol=tol,
+        mutation=mutation, recombination=recombination, polish=polish,
+        workers=1, callback=_callback(is_cancelled, progress, maxiter),
     )
-    if is_cancelled is not None and is_cancelled():
-        raise Cancelled()
-    best_L, best_D = float(result.x[0]), float(result.x[1])
-    best_res = _safe_evaluate(base_config, best_L, best_D)
-    util = governing_utilisation(best_res)
-    success = util <= 1.0 + 1e-4
-    cost = cost_a * best_L * best_D ** 2 + cost_b * best_L
+    _check_cancelled(is_cancelled)
+    best_L, best_D = int(round(float(result.x[0]))), float(result.x[1])
+    best_res = _safe_evaluate(cfg, best_L, best_D)
+    success = (lo <= best_L <= hi and dlo <= best_D <= dhi
+               and governing_utilisation(best_res) <= 1.0 + FEASIBILITY_TOL)
+    cost = a * best_L * best_D ** 2 + b * best_L
     return {
-        "best_L": best_L,
-        "best_D": best_D,
-        "best_cost": cost,
-        "best_results": best_res,
-        "success": success,
-        "fun": float(result.fun),
-        "nfev": result.nfev,
-        "message": "OK" if success else "No safe design found in bounds",
+        "best_L": float(best_L), "best_D": best_D, "best_cost": cost,
+        "best_results": best_res, "success": success, "feasible": success,
+        "converged": bool(result.success), "fun": cost,
+        "normalized_objective": float(result.fun), "nfev": len(cache) + 1,
+        "solver_nfev": result.nfev, "solver_message": str(result.message),
+        "message": ("OK" if success else
+                    "No feasible design found within bounds and search budget"),
+        "length_increment": 1.0,
     }

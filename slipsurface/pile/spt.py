@@ -5,9 +5,14 @@ Each SPT record is one test at one depth, with what the laboratory measured on
 its sample. From them this module builds the layers the analysis takes
 (`config["soil_profile"]`), and says where every value came from.
 
-    profile = derive_profile(borehole)            # or a list of boreholes
+    profile = derive_profile(borehole)
     cfg = profile.apply(default_config("bored"))  # soil profile + water table
     result = analyse(cfg)
+
+A list of several boreholes returns an ``SPTInvestigation``. Each log keeps
+its own layers and water table; ``investigation.apply(cfg)`` passes all of
+them to the analysis so every borehole is checked at the same pile geometry.
+Different boreholes are never averaged into an invented soil column.
 
 A borehole::
 
@@ -73,12 +78,13 @@ Layers
     behaviour whose N60 is closest; a thin layer between two of the other
     behaviour (a clay lens in sand) is kept. A layer's value of each
     parameter is the mean of its measured values, or else the mean of the
-    correlated ones. Tests at the same depth in several boreholes are taken
-    together.
+    correlated ones. Repeated tests at the same depth within a borehole may
+    be taken together only when their soil classifications are compatible.
 """
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Union
@@ -95,6 +101,12 @@ MEASURED = ("gamma", "phi", "cu", "Cc", "Cr", "e0", "E")
 #: Main soil groups of the USCS symbols
 GROUP_NAMES = {"G": "Gravel", "S": "Sand", "M": "Silt", "C": "Clay", "O": "Organic soil",
                "P": "Peat"}
+
+USCS_SYMBOLS = {"GW", "GP", "GM", "GC", "SW", "SP", "SM", "SC", "CL", "ML", "CH", "MH",
+                "OL", "OH", "PT"}
+
+RECORD_NUMBERS = ("depth", "N", "fines", "LL", "PL", "w", "gamma", "cu", "phi", "Cc", "Cr",
+                  "e0", "sigma_p", "E")
 
 
 # --------------------------------------------------------------------------- #
@@ -222,19 +234,110 @@ class SPTProfile:
     records: List[dict]                # every test, corrected, with its layer number
     sources: List[Dict[str, str]]      # per layer: parameter -> where it came from
     warnings: List[str] = field(default_factory=list)
+    name: str = "BH-1"
 
     def apply(self, cfg: dict) -> dict:
-        """A copy of the configuration with this soil profile (and water table)."""
-        import copy
+        """A copy using this log, including its explicit dry/groundwater state."""
         out = copy.deepcopy(cfg)
         out["soil_profile"] = copy.deepcopy(self.layers)
-        if self.water_depth is not None:
-            out.setdefault("groundwater", {})["depth"] = self.water_depth
+        out.setdefault("groundwater", {})["depth"] = self.water_depth
+        out.pop("boreholes", None)
         return out
 
     @property
     def depth(self) -> float:
         return sum(layer["thickness"] for layer in self.layers)
+
+
+@dataclass
+class SPTInvestigation:
+    """Independent borehole profiles for a design checked against every log.
+
+    There is deliberately no combined ``layers`` property. A controlling
+    borehole is a result of the pile checks, not a soil-parameter average.
+    """
+
+    profiles: List[SPTProfile]
+    warnings: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if len(self.profiles) < 2:
+            raise ValueError("An SPT investigation needs at least two boreholes.")
+        names = self.names
+        if any(not isinstance(name, str) or not name.strip() for name in names):
+            raise ValueError("Every borehole needs a nonempty name.")
+        if len(set(names)) != len(names):
+            raise ValueError("Borehole names must be unique.")
+        if not self.warnings:
+            self.warnings = [f"{profile.name}: {warning}" for profile in self.profiles
+                             for warning in profile.warnings]
+
+    @property
+    def names(self) -> List[str]:
+        return [profile.name for profile in self.profiles]
+
+    def apply(self, cfg: dict) -> dict:
+        """Copy a configuration and attach the separate logs for all-log checks."""
+        out = copy.deepcopy(cfg)
+        out["boreholes"] = [
+            {"name": profile.name, "soil_profile": copy.deepcopy(profile.layers),
+             "groundwater": {"depth": profile.water_depth}}
+            for profile in self.profiles
+        ]
+        return out
+
+
+def _number(value, label: str, *, minimum: Optional[float] = None,
+            maximum: Optional[float] = None, positive: bool = False) -> float:
+    """Read a finite number without accepting booleans as measurements."""
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(f"{label}: a finite number is required") from None
+    if not math.isfinite(number):
+        raise ValueError(f"{label}: a finite number is required")
+    if positive and number <= 0:
+        raise ValueError(f"{label}: must be positive")
+    if minimum is not None and number < minimum:
+        raise ValueError(f"{label}: must be at least {minimum:g}")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"{label}: must not exceed {maximum:g}")
+    return number
+
+
+def _record(record: dict, name: str) -> dict:
+    """Validate a sample before using it in any correction or correlation."""
+    if not isinstance(record, dict) or any(record.get(key) in (None, "")
+                                          for key in ("depth", "N")):
+        raise ValueError(f"{name}: an SPT record needs a depth and a blow count N")
+    out = dict(record)
+    for key in RECORD_NUMBERS:
+        value = out.get(key)
+        if value is None or value == "":
+            out.pop(key, None)
+            continue
+        out[key] = _number(value, f"{name}: {key}", minimum=0.0,
+                           positive=key in ("depth", "gamma", "cu", "sigma_p", "E"))
+    if out.get("fines") is not None and out.get("fines") != "" and out["fines"] > 100:
+        raise ValueError(f"{name}: fines must be between 0 and 100 percent")
+    if out.get("phi") is not None and out.get("phi") != "" and out["phi"] >= 50:
+        raise ValueError(f"{name}: phi must be below 50 degrees")
+    if _float(out, "LL") is not None and _float(out, "PL") is not None:
+        if out["PL"] > out["LL"]:
+            raise ValueError(f"{name}: PL must not exceed LL")
+    if _float(out, "Cc") is not None and _float(out, "Cr") is not None:
+        if out["Cr"] > out["Cc"]:
+            raise ValueError(f"{name}: Cr must not exceed Cc")
+    behaviour = out.get("behaviour")
+    if behaviour not in (None, "", "granular", "cohesive"):
+        raise ValueError(f"{name}: behaviour must be granular or cohesive")
+    symbol = str(out.get("uscs") or "").upper().replace(" ", "")
+    if symbol and any(part not in USCS_SYMBOLS for part in symbol.split("-")):
+        raise ValueError(f"{name}: unknown USCS symbol {symbol!r}")
+    out["uscs"] = symbol
+    return out
 
 
 def _float(record: dict, key: str) -> Optional[float]:
@@ -244,25 +347,31 @@ def _float(record: dict, key: str) -> Optional[float]:
     return float(value)
 
 
-def _levels(boreholes: Sequence[dict], same_depth: float) -> List[dict]:
-    """The tests in depth order; tests at the same depth form one level."""
+def _levels(hole: dict, same_depth: float) -> List[dict]:
+    """One log in depth order; compatible repeated tests form one level."""
     tests = []
-    for b, hole in enumerate(boreholes):
-        er = float(hole.get("energy_ratio", 60.0))
-        dia = float(hole.get("borehole_diameter", 100.0))
-        liner = bool(hole.get("liner", True))
-        for i, rec in enumerate(hole.get("records") or []):
-            name = f"{hole.get('name') or f'BH-{b + 1}'} #{i + 1}"
-            try:
-                depth, N = float(rec["depth"]), float(rec["N"])
-            except (KeyError, TypeError, ValueError):
-                raise ValueError(f"{name}: an SPT record needs a depth and a blow count N")
-            if depth <= 0 or N < 0:
-                raise ValueError(f"{name}: the depth must be positive and N not negative")
-            test = dict(rec, borehole=hole.get("name") or f"BH-{b + 1}", depth=depth, N=N,
-                        N60=n60(N, depth, er, dia, liner), PI=plasticity_index(rec),
-                        behaviour=classify(rec))
-            tests.append(test)
+    er = _number(hole.get("energy_ratio", 60.0), f"{hole['name']}: energy_ratio",
+                 positive=True)
+    dia = _number(hole.get("borehole_diameter", 100.0),
+                  f"{hole['name']}: borehole_diameter", minimum=65.0, maximum=200.0)
+    liner = hole.get("liner", True)
+    if not isinstance(liner, bool):
+        raise ValueError(f"{hole['name']}: liner must be a boolean")
+    records = hole.get("records")
+    if records is None:
+        records = []
+    if not isinstance(records, (list, tuple)):
+        raise ValueError(f"{hole['name']}: records must be a list of SPT records")
+    for i, raw in enumerate(records):
+        name = f"{hole['name']} #{i + 1}"
+        rec = _record(raw, name)
+        depth, N = rec["depth"], rec["N"]
+        corrected = n60(N, depth, er, dia, liner)
+        if not math.isfinite(corrected):
+            raise ValueError(f"{name}: corrected N60 must be finite")
+        test = dict(rec, borehole=hole["name"], N60=corrected, PI=plasticity_index(rec),
+                    behaviour=classify(rec))
+        tests.append(test)
     if not tests:
         raise ValueError("No SPT records were given.")
     tests.sort(key=lambda t: t["depth"])
@@ -273,10 +382,13 @@ def _levels(boreholes: Sequence[dict], same_depth: float) -> List[dict]:
         else:
             levels.append({"depth": test["depth"], "tests": [test]})
     for level in levels:
-        kinds = [t["behaviour"] for t in level["tests"]]
-        level["behaviour"] = max(set(kinds), key=kinds.count)
-        groups = [soil_group(t) for t in level["tests"] if soil_group(t)]
-        level["group"] = max(set(groups), key=groups.count) if groups else ""
+        kinds = {t["behaviour"] for t in level["tests"]}
+        groups = {soil_group(t) for t in level["tests"] if soil_group(t)}
+        if len(kinds) > 1 or len(groups) > 1:
+            raise ValueError(f"{hole['name']}: conflicting soil classifications near "
+                             f"depth {level['depth']:g} m; resolve the log or reduce same_depth")
+        level["behaviour"] = level["tests"][0]["behaviour"]
+        level["group"] = next(iter(groups), "")
         level["N60"] = sum(t["N60"] for t in level["tests"]) / len(level["tests"])
     return levels
 
@@ -291,17 +403,26 @@ def _intervals(levels: List[dict], bottom: Optional[float]) -> None:
             half = (level["depth"] - levels[i - 1]["depth"]) / 2.0 if i else 0.75
             level["bottom"] = level["depth"] + max(half, 0.5)
     if bottom is not None:
-        if bottom <= levels[-1]["depth"]:
+        deepest = max(t["depth"] for level in levels for t in level["tests"])
+        if bottom <= deepest:
             raise ValueError("The profile must reach below the deepest test.")
         levels[-1]["bottom"] = float(bottom)
 
 
 def _unit_weights(level: dict, zw: Optional[float]) -> tuple:
-    measured = [t["gamma"] for t in level["tests"] if _float(t, "gamma") is not None]
+    measured = [t for t in level["tests"] if _float(t, "gamma") is not None]
     if measured:
-        g = sum(float(x) for x in measured) / len(measured)
-        below = zw is not None and level["depth"] >= zw
-        return ((g - 1.0, g) if below else (g, g + 1.0)), "measured"
+        pairs = []
+        for test in measured:
+            g = test["gamma"]
+            below = zw is not None and test["depth"] >= zw
+            gammas = (g - 1.0, g) if below else (g, g + 1.0)
+            if gammas[0] <= 0 or gammas[1] <= GAMMA_W:
+                raise ValueError(f"{test['borehole']}: gamma at {test['depth']:g} m must "
+                                 "give positive dry weight and saturated weight above "
+                                 "the water unit weight")
+            pairs.append(gammas)
+        return tuple(sum(pair[i] for pair in pairs) / len(pairs) for i in (0, 1)), "measured"
     return typical_unit_weight(level["behaviour"], level["N60"]), "typical"
 
 
@@ -329,8 +450,8 @@ def _stresses(levels: List[dict], zw: Optional[float]) -> None:
     for level in levels:
         level["sigma_eff"] = sigma(level["depth"])
         for t in level["tests"]:
-            t["sigma_eff"] = level["sigma_eff"]
-            t["N1_60"] = overburden_factor(level["sigma_eff"]) * t["N60"]
+            t["sigma_eff"] = sigma(t["depth"])
+            t["N1_60"] = overburden_factor(t["sigma_eff"]) * t["N60"]
 
 
 def _alike(layer: List[dict], level: dict, rel: float, abs_n: float) -> bool:
@@ -400,8 +521,7 @@ def _layer(levels: List[dict], index: int, warnings: List[str]) -> tuple:
     PIs = [t["PI"] for t in tests if t["PI"] is not None]
     PI = _mean(PIs) if PIs else None
     src: Dict[str, str] = {}
-    layer: Dict[str, Any] = {"behaviour": kind, "thickness": round(thickness, 3),
-                             "N60": round(N60, 1)}
+    layer: Dict[str, Any] = {"behaviour": kind, "thickness": thickness, "N60": N60}
     src["N60"] = f"mean of {len(tests)} test(s), Skempton (1986) corrections"
 
     def take(key, correlated, how):
@@ -430,9 +550,9 @@ def _layer(levels: List[dict], index: int, warnings: List[str]) -> tuple:
         src["nu"] = "typical (0.30)"
     else:
         take("cu", stroud_f1(PI) * N60, f"Stroud (1974), f1 = {stroud_f1(PI):.1f} kPa")
-        if layer["cu"] < 5.0:
-            warnings.append(f"Layer {index}: cu {layer['cu']:.1f} kPa raised to 5 kPa "
-                            "(N60 near zero; test the strength).")
+        if not measured["cu"] and layer["cu"] < 5.0:
+            warnings.append(f"Layer {index}: correlated cu {layer['cu']:.1f} kPa raised "
+                            "to 5 kPa (low SPT resistance; measure the strength).")
             layer["cu"] = 5.0
             src["cu"] += ", raised to the 5 kPa floor"
         take("phi", phi_from_pi(PI), "Terzaghi, Peck & Mesri (1996) from PI"
@@ -463,33 +583,20 @@ def _layer(levels: List[dict], index: int, warnings: List[str]) -> tuple:
     main = levels[0]["group"]
     noun = GROUP_NAMES.get(main, "Cohesive soil" if kind == "cohesive" else "Granular soil")
     layer["name"] = f"{noun} ({', '.join(groups)})" if groups else noun
-    for key in ("gamma", "gamma_sat", "phi", "cu", "OCR", "E", "Cc", "Cr", "e0"):
-        layer[key] = round(float(layer[key]), 4)
+    for key in ("thickness", "N60", "gamma", "gamma_sat", "phi", "cu", "OCR", "E",
+                "Cc", "Cr", "e0"):
+        layer[key] = float(layer[key])
+        if not math.isfinite(layer[key]):
+            raise ValueError(f"Layer {index}: derived {key} must be finite")
     ordered = {k: layer[k] for k in ("name", "thickness", "behaviour", "gamma", "gamma_sat",
                                      "phi", "cu", "OCR", "N60", "E", "nu", "Cc", "Cr", "e0")}
     return ordered, src
 
 
-def derive_profile(boreholes: Union[dict, Sequence[dict]], water_depth: Optional[float] = None,
-                   bottom: Optional[float] = None, tolerance: float = 0.5,
-                   min_n_difference: float = 5.0, min_thickness: float = 1.0,
-                   same_depth: float = 0.25) -> SPTProfile:
-    """The soil layers from one borehole or several (taken together).
-
-    water_depth   the water table, m (default: the shallowest a borehole gives)
-    bottom        the depth the profile reaches (default: half a test spacing
-                  below the deepest test)
-    tolerance, min_n_difference
-                  how far a test's N60 may stray from a layer's mean and still
-                  join it: 50 %, but at least 5 blows
-    min_thickness thinner layers join a neighbour of the same behaviour, m
-    same_depth    tests closer than this, in any borehole, form one level, m
-    """
-    holes = [boreholes] if isinstance(boreholes, dict) else list(boreholes)
-    if water_depth is None:
-        given = [float(h["water_depth"]) for h in holes if h.get("water_depth") is not None]
-        water_depth = min(given) if given else None
-    levels = _levels(holes, same_depth)
+def _derive_one(hole: dict, water_depth: Optional[float], bottom: Optional[float],
+                tolerance: float, min_n_difference: float, min_thickness: float,
+                same_depth: float) -> SPTProfile:
+    levels = _levels(hole, same_depth)
     _intervals(levels, bottom)
     _stresses(levels, water_depth)
     groups = _merge(levels, tolerance, min_n_difference, min_thickness)
@@ -508,4 +615,64 @@ def derive_profile(boreholes: Union[dict, Sequence[dict]], water_depth: Optional
                                 "sigma_eff": round(t["sigma_eff"], 1),
                                 "uscs": t.get("uscs") or "", "behaviour": t["behaviour"],
                                 "layer": index})
-    return SPTProfile(layers, water_depth, records, sources, warnings)
+    return SPTProfile(layers, water_depth, records, sources, warnings, name=hole["name"])
+
+
+def derive_profile(boreholes: Union[dict, Sequence[dict]], water_depth: Optional[float] = None,
+                   bottom: Optional[float] = None, tolerance: float = 0.5,
+                   min_n_difference: float = 5.0, min_thickness: float = 1.0,
+                   same_depth: float = 0.25) -> Union[SPTProfile, SPTInvestigation]:
+    """Derive one profile per borehole without pooling different logs.
+
+    One dictionary or a one-item list returns ``SPTProfile``. Several logs
+    return ``SPTInvestigation``; apply it to a configuration to check all logs
+    at the same pile geometry and let the unfavorable checks govern.
+
+    water_depth   optional override for a single borehole; for multiple logs
+                  put each water table in its own borehole dictionary.
+                  A missing water table means explicitly dry, with a warning.
+    bottom        depth reached by each profile (default: half a test spacing
+                  below that log's deepest test)
+    tolerance, min_n_difference
+                  within-log N60 tolerances for joining adjacent levels
+    min_thickness thinner layers join a neighbor of the same behavior, m
+    same_depth    compatible tests this close within one log form a level, m
+    """
+    if isinstance(boreholes, dict):
+        holes = [boreholes]
+    elif isinstance(boreholes, (list, tuple)):
+        holes = list(boreholes)
+    else:
+        raise ValueError("Boreholes must be one dictionary or a list of dictionaries.")
+    if not holes:
+        raise ValueError("No SPT records were given.")
+    if len(holes) > 1 and water_depth is not None:
+        raise ValueError("For multiple boreholes, set water_depth separately on each log.")
+    if water_depth is not None:
+        water_depth = _number(water_depth, "water_depth", minimum=0.0)
+    if bottom is not None:
+        bottom = _number(bottom, "bottom", positive=True)
+    options = {"tolerance": tolerance, "min_n_difference": min_n_difference,
+               "min_thickness": min_thickness, "same_depth": same_depth}
+    options = {key: _number(value, key, minimum=0.0) for key, value in options.items()}
+    prepared = []
+    names = set()
+    for index, raw in enumerate(holes, start=1):
+        if not isinstance(raw, dict):
+            raise ValueError(f"Borehole {index}: a dictionary is required")
+        name = raw.get("name", f"BH-{index}")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"Borehole {index}: a nonempty name is required")
+        name = name.strip()
+        if name in names:
+            raise ValueError(f"Borehole names must be unique: {name!r}")
+        names.add(name)
+        own_water = raw.get("water_depth")
+        if own_water is not None:
+            own_water = _number(own_water, f"{name}: water_depth", minimum=0.0)
+        if water_depth is not None:
+            own_water = water_depth
+        prepared.append((dict(raw, name=name), own_water))
+    profiles = [_derive_one(hole, own_water, bottom, **options)
+                for hole, own_water in prepared]
+    return profiles[0] if len(profiles) == 1 else SPTInvestigation(profiles)

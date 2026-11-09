@@ -2,6 +2,10 @@
 Configurations: the defaults, how a partial configuration is completed and
 checked, and the pile type that decides which analysis runs.
 """
+import math
+
+import pytest
+
 from slipsurface.pile import project
 from slipsurface.pile.config import DEFAULT_CONFIG
 
@@ -21,29 +25,36 @@ def test_a_file_missing_entries_keeps_the_defaults():
     assert cfg["soil_profile"] == DEFAULT_CONFIG["soil_profile"]
 
 
-def test_unknown_choices_fall_back_to_the_default():
-    cfg = project.normalize({"options": {"clay_method": "nonsense"},
-                             "pile": {"shape": "hexagon"}})
-    assert cfg["options"]["clay_method"] == DEFAULT_CONFIG["options"]["clay_method"]
-    assert cfg["pile"]["shape"] == DEFAULT_CONFIG["pile"]["shape"]
+@pytest.mark.parametrize("cfg, field", [
+    ({"options": {"clay_method": "nonsense"}}, "options.clay_method"),
+    ({"pile": {"shape": "hexagon"}}, "pile.shape"),
+    ({"options": {"tip_methd": "vesic"}}, "tip_methd"),
+])
+def test_unknown_choices_and_misspelled_fields_are_refused(cfg, field):
+    with pytest.raises(ValueError, match=field):
+        project.normalize(cfg)
 
 
 def test_numbers_are_numbers_and_the_pile_count_is_whole():
-    cfg = project.normalize({"group": {"nx": 3.4}, "pile": {"D": "0.6"}})
+    cfg = project.normalize({"group": {"nx": 3.0}, "pile": {"D": "0.6"}})
     assert cfg["group"]["nx"] == 3 and cfg["pile"]["D"] == 0.6
+    with pytest.raises(ValueError, match="whole number"):
+        project.normalize({"group": {"nx": 3.4}})
 
 
-def test_rows_without_a_thickness_are_dropped():
-    rows = DEFAULT_CONFIG["soil_profile"] + [{"name": "x", "thickness": None},
-                                             {"name": "y", "thickness": 0}]
-    cfg = project.normalize({"soil_profile": rows})
-    assert cfg["soil_profile"] == DEFAULT_CONFIG["soil_profile"]
+@pytest.mark.parametrize("row", [{"name": "x"}, {"thickness": None}, {"thickness": 0},
+                                 {"thickness": -1}, {"thickness": math.nan}])
+def test_invalid_layers_are_refused_instead_of_deleted(row):
+    with pytest.raises(ValueError, match="thickness"):
+        project.normalize({"soil_profile": DEFAULT_CONFIG["soil_profile"] + [row]})
 
 
-def test_an_unknown_pile_type_reads_as_bored():
+def test_an_omitted_type_defaults_but_an_unknown_type_is_refused():
     assert project.pile_type_of(None) == "bored"
-    assert project.pile_type_of("nonsense") == "bored"
-    assert project.normalize({"pile_type": "nonsense"})["pile_type"] == "bored"
+    with pytest.raises(ValueError, match="pile_type"):
+        project.pile_type_of("nonsense")
+    with pytest.raises(ValueError, match="pile_type"):
+        project.normalize({"pile_type": "nonsense"})
 
 
 def test_a_default_title_follows_the_pile_type():
@@ -53,8 +64,8 @@ def test_a_default_title_follows_the_pile_type():
 
 
 def test_a_bored_pile_is_installed_as_bored():
-    cfg = project.normalize({"pile_type": "bored", "pile": {"installation": "driven_high"}})
-    assert cfg["pile"]["installation"] == "bored"
+    with pytest.raises(ValueError, match="installation"):
+        project.normalize({"pile_type": "bored", "pile": {"installation": "driven_high"}})
 
 
 def test_a_driven_pile_is_installed_by_driving():
@@ -63,7 +74,35 @@ def test_a_driven_pile_is_installed_by_driving():
                                   "pile": {"installation": value}})["pile"]["installation"]
     assert project.default_config("driven")["pile"]["installation"] == "driven_high"
     assert installation("driven_low") == "driven_low"
-    assert installation("bored") == "driven_high"
+    with pytest.raises(ValueError, match="installation"):
+        installation("bored")
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf, None, True, ""])
+def test_nonfinite_or_missing_supplied_numbers_are_refused(value):
+    with pytest.raises(ValueError, match="pile.D"):
+        project.normalize({"pile": {"D": value}})
+
+
+def test_empty_profiles_do_not_become_the_example_geology():
+    with pytest.raises(ValueError, match="at least one layer"):
+        project.normalize({"soil_profile": []})
+
+
+def test_boolean_text_is_parsed_explicitly_and_unrecognised_values_fail():
+    assert project.normalize({"seismic": {"enabled": "false"}})["seismic"]["enabled"] is False
+    assert project.normalize({"seismic": {"enabled": "TRUE"}})["seismic"]["enabled"] is True
+    with pytest.raises(ValueError, match="true or false"):
+        project.normalize({"seismic": {"enabled": "sometimes"}})
+
+
+def test_explicitly_dry_profile_is_not_replaced_with_default_water():
+    assert project.normalize({"groundwater": {"depth": None}})["groundwater"]["depth"] is None
+
+
+def test_normalisation_is_idempotent_and_preserves_driven_installation():
+    cfg = project.default_config("driven")
+    assert project.normalize(cfg) == cfg
 
 
 def test_driven_and_bored_give_different_capacities():

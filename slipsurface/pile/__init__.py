@@ -65,13 +65,14 @@ APP_NAME = "SlipSurface IQ Pile"
 
 from ._optional import MissingDependency  # noqa: E402
 from .engine import PileAnalysis, analyse  # noqa: E402
+from .analysis import BoreholeAnalysis  # noqa: E402
 from .errors import PileError  # noqa: E402
 from .optimizer import optimize_cost, optimize_length  # noqa: E402
 from .project import default_config, normalize  # noqa: E402
 from .socket import SocketAnalysis, analyse_socket  # noqa: E402
-from .spt import SPTProfile, derive_profile  # noqa: E402
+from .spt import SPTInvestigation, SPTProfile, derive_profile  # noqa: E402
 
-__all__ = ["__version__", "APP_NAME", "analyse", "PileAnalysis", "analyse_socket",
+__all__ = ["__version__", "APP_NAME", "analyse", "PileAnalysis", "BoreholeAnalysis", "analyse_socket",
            "SocketAnalysis", "default_config", "normalize", "optimize_length",
-           "optimize_cost", "derive_profile", "SPTProfile", "PileError",
+           "optimize_cost", "derive_profile", "SPTProfile", "SPTInvestigation", "PileError",
            "MissingDependency"]

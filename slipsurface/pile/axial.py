@@ -134,13 +134,24 @@ def tip_meyerhof(sigma_v: float, phi: float) -> Dict[str, float]:
     return {"qb": min(q, limit), "Nq": Nq, "limit": limit, "limited": q > limit}
 
 
-def vesic_nq(phi: float, Irr: float) -> float:
-    """Vesić's (1977) Nq* of a deep foundation for a reduced rigidity index Irr."""
+def vesic_nsigma(phi: float, Irr: float) -> float:
+    """Vesić's Nσ*, to be multiplied by mean effective normal stress.
+
+    USACE EM 1110-1-1905 (30 October 1992), equations 5-5b and 5-6a,
+    and the worked example on page 5-18 distinguish this factor from the
+    factor multiplying vertical effective stress. The latter also includes
+    (1 + 2 K0) / 3. See ``vesic_nq``.
+    """
     p = math.radians(phi)
     s = math.sin(p)
     return (3.0 / (3.0 - s) * math.exp((math.pi / 2.0 - p) * math.tan(p))
             * math.tan(math.pi / 4.0 + p / 2.0) ** 2
             * max(Irr, 1.0) ** (4.0 * s / (3.0 * (1.0 + s))))
+
+
+def vesic_nq(phi: float, Irr: float) -> float:
+    """Vesić's Nq* multiplying vertical stress, with Jáky's NC-soil K0."""
+    return vesic_nsigma(phi, Irr) * (1.0 + 2.0 * K0(phi)) / 3.0
 
 
 def tip_vesic(sigma_v: float, phi: float, E: float, nu: float) -> Dict[str, float]:
@@ -155,8 +166,14 @@ def tip_vesic(sigma_v: float, phi: float, E: float, nu: float) -> Dict[str, floa
     Ir = 1000.0 * E / (2.0 * (1.0 + nu) * sv * tan_phi)
     delta = max(0.005 * (1.0 - (min(max(phi, 25.0), 45.0) - 25.0) / 20.0) * sv / PA, 0.0)
     Irr = Ir / (1.0 + Ir * delta)
-    Nq = vesic_nq(phi, Irr)
-    return {"qb": sigma_v * Nq, "Nq": Nq, "Ir": Ir, "Irr": Irr, "delta": delta}
+    Nsigma = vesic_nsigma(phi, Irr)
+    k0 = K0(phi)
+    mean_stress_factor = (1.0 + 2.0 * k0) / 3.0
+    sigma_mean = sigma_v * mean_stress_factor
+    Nq = Nsigma * mean_stress_factor
+    return {"qb": sigma_mean * Nsigma, "Nq": Nq, "Nsigma": Nsigma,
+            "K0": k0, "sigma_mean": sigma_mean, "mean_stress_factor": mean_stress_factor,
+            "Ir": Ir, "Irr": Irr, "delta": delta}
 
 
 def janbu_nq(phi: float, eta: float) -> float:

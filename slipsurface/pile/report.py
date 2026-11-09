@@ -63,7 +63,9 @@ REPORT_TEXTS = {
     "Qs_t": "Shaft friction in tension Qs,t", "W_t": "Pile weight W",
     "T_all": "Allowable uplift Qs,t / FS + W", "T": "Largest tension T",
     "block_up": "Block uplift: shear + weight, allowable",
+    "group_comp": "Allowable group compression Qg,ult,net / FS",
     "c_seis_c": "Seismic, compression (FS)", "c_seis_t": "Seismic, uplift (FS on Qs,t)",
+    "c_seis_gc": "Seismic, group compression (FS)",
     "c_seis_g": "Seismic, block uplift (FS)",
     "sec_figs": "Figures", "sec_warn": "Warnings", "sec_notes": "Method notes",
     "sec_socket": "Rock-socketed pile", "sec_socket_in": "Socket, rock and concrete",
@@ -114,12 +116,12 @@ REPORT_TEXTS = {
     "ratio": "Em / Ei", "alpha_E": "Joint factor αE", "GSI": "GSI", "mi": "mi",
     "mb": "mb", "s_hb": "s", "fc": "Concrete strength f'c", "Ec": "Concrete modulus Ec",
     "correlation": "Correlation", "formula": "fs (MPa)", "fs": "fs (kPa)",
-    "Ls_req": "Ls needed (m)", "Q_all": "Qall at Ls (kN)", "range": "In range",
+    "Ls_req": "Design Ls (m)", "Q_all": "Qall at Ls (kN)", "range": "In range",
     "base_formula": "qb (MPa)", "qb_mpa": "qb (MPa)",
     "fs_design": "Design side shear", "qb_design": "Design base resistance",
     "FS_side": "Factor of safety on the side", "FS_base": "Factor of safety on the base",
-    "Ls_need": "Socket length needed", "Ls_min": "Minimum socket length",
-    "Ls_design": "Design socket length",
+    "Ls_need": "Continuous capacity estimate (diagnostic)", "Ls_min": "Minimum socket length",
+    "Ls_design": "Recommended whole-metre socket length",
     "rw": "Randolph & Wroth, side and base", "rw_side": "Randolph & Wroth, side only",
     "vesic": "Vesić", "shortening": "Shortening through the overburden",
     "base_share": "Share carried by the base",
@@ -137,7 +139,9 @@ REPORT_TEXTS = {
         "fs = α·cu. The β method fs = (1 − sin φ')·tan φ'·√OCR·σ'v; the λ method "
         "fs = λ·(σ'v + 2cu), λ from the pile's penetration (Vijayvergiya & Focht).",
         "The base in sand: Meyerhof qb = σ'v·Nq* ≤ 0.5·pa·Nq*·tan φ'; Vesić "
-        "qb = σ'v·Nq*(Irr), Irr the rigidity index reduced for volume change; Janbu "
+        "qb = σ'm·Nσ = σ'v·[(1 + 2K0)/3]·Nσ, K0 = 1 − sin φ', and "
+        "Nq = [(1 + 2K0)/3]·Nσ. Irr is the rigidity index reduced for volume change "
+        "(USACE EM 1110-1-1905, equations 5-5b and 5-6a); Janbu "
         "qb = σ'v·(tan φ' + √(1 + tan² φ'))²·e^(2η'·tan φ'). In clay qb = Nc*·cu with "
         "Nc* = 9, Vesić's 4/3·(ln Ir + 1) + π/2 + 1, or Janbu's 2 + 2η'; the overburden "
         "term is left out, as it is balanced by the pile's own weight.",
@@ -150,12 +154,16 @@ REPORT_TEXTS = {
         "2 : 1 below it (clays by Cc, Cr, e0 and OCR, the others by their constrained "
         "modulus), plus the piles' shortening above it; by Vesić's s·√(Bg/D); or by "
         "Meyerhof's SPT rule in sand.",
-        "The required length is the shortest pile, in steps of the length search, "
-        "that passes the single-pile and the group check — and the seismic checks when "
-        "the earthquake is on — with every other input held as it is.",
+        "The recommended length is the shortest whole-metre pile within the logged "
+        "profile and the specified lower bound that passes single-pile capacity, "
+        "group capacity, settlement and every active seismic check. Each whole-metre "
+        "candidate is recalculated at its actual tip depth; passing a shorter "
+        "fractional length does not establish that a longer pile passes in layered soil.",
         "Seismic load case: the rigid cap shares V, M_B and M_L among the piles, "
         "P = V/n + M_B·x/Σx² + M_L·y/Σy². The most compressed pile is checked against "
-        "Qult,net / FS. A pile in tension is resisted by its shaft friction in tension, "
+        "Qult,net / FS, and positive total V is checked against the group's net "
+        "capacity divided by the seismic factor of safety. A moment about an axis "
+        "with no pile lever arm is rejected. A pile in tension is resisted by its shaft friction in tension, "
         "Qs,t = Σ λt·ζ·fs·p·Δz (λt the tension ratio of sand or clay, ζ the cyclic "
         "reduction), and its own weight W: T ≤ Qs,t / FS + W. When the group as a whole "
         "is lifted (V < 0) the block is checked too: soil-on-soil shear round its "
@@ -163,8 +171,10 @@ REPORT_TEXTS = {
     ],
     "socket_notes": [
         "The side shear is fs·π·D·Ls and the base resistance qb·π·D²/4. The allowable "
-        "capacity is Qs/FSside + Qb/FSbase − W; the socket length is the shortest that "
-        "carries the load, found by bisection, and at least the minimum length.",
+        "capacity is Qs/FSside + Qb/FSbase − W. Bisection provides a continuous "
+        "capacity-only diagnostic. The recommendation is the first whole-metre "
+        "length that passes capacity, minimum embedment and settlement after "
+        "recalculation; an entered length is checked against all three criteria.",
         "qu in the side shear correlations is the weaker of the rock and the concrete. "
         "The linear rules (Reynolds & Kaderabek, Gupton & Logan, Toh et al.) were "
         "fitted to weak rock and are left out of the statistics above the weak rock "
@@ -174,8 +184,10 @@ REPORT_TEXTS = {
         "Diederichs 2006), or is entered.",
         "The settlement is Randolph & Wroth's closed form for a compressible pile in an "
         "elastic medium, with the socket's rock along the shaft and below the base, plus "
-        "the elastic shortening of the pile through the overburden, whose friction is "
-        "ignored.",
+        "the elastic shortening of the pile through the overburden. The side-only "
+        "solution governs the settlement check when base resistance is disabled; "
+        "otherwise the side-and-base solution is used. Optional overburden shaft "
+        "resistance contributes to capacity when enabled.",
     ],
 }
 
@@ -232,6 +244,35 @@ def _kv_table(T, rows: List[List[Any]]) -> str:
     return _table([T["parameter"], T["value"], T["unit"]], rows, [50, 36, 14])
 
 
+def _check_label(T, key: str) -> str:
+    labels = {
+        "pile": T["c_pile"], "group": T["c_group"], "settlement": T["c_settle"],
+        "seismic_compression": T["c_seis_c"], "seismic_tension": T["c_seis_t"],
+        "seismic_group_compression": T["c_seis_gc"],
+        "seismic_group_tension": T["c_seis_g"],
+        "capacity": "Socket capacity (kN)", "min_length": "Minimum socket length (m)",
+        "shared_design": "Common design for every borehole",
+    }
+    return labels.get(key, key.replace("_", " "))
+
+
+def _checks_table(T, checks: dict, *, boreholes: bool = False) -> str:
+    rows = []
+    for key, check in checks.items():
+        row = [_esc(_check_label(T, key)), _f(check.get("actual")),
+               _f(check.get("allowable")), _f(check.get("utilisation"), 3),
+               _status(T, check["status"])]
+        if boreholes:
+            row.append(_esc(check.get("governing_borehole") or "—"))
+        rows.append(row)
+    headers = [T["check"], T["actual"], "Limit", "Utilisation", T["status"]]
+    widths = [36, 17, 17, 15, 15]
+    if boreholes:
+        headers.append("Governing borehole")
+        widths = [28, 12, 12, 12, 12, 24]
+    return _table(headers, rows, widths)
+
+
 class _Numbers:
     """Section numbers that follow whatever the report happens to contain."""
 
@@ -275,6 +316,8 @@ def render_figures(analysis, keys=None, dpi: int = 130) -> Dict[str, bytes]:
 def render_socket_figures(socket, dpi: int = 130) -> Dict[str, bytes]:
     if socket is None:
         return {}
+    if socket.results.get("envelope"):
+        return render_figures(socket, dpi=dpi)
     plotter = SocketPlotter(socket, titles=False)
     out = {}
     for key in SOCKET_PLOT_KEYS:
@@ -299,7 +342,9 @@ def _pile_section(T, L, a, figures, img_src, N: _Numbers) -> List[str]:
         rows.append([T["sx"], _f(a.sx), "m"])
     if a.ny > 1:
         rows.append([T["sy"], _f(a.sy), "m"])
-    rows += [[T["zw"], _f(a.profile.zw), "m"], [T["gw"], _f(a.profile.gw), "kN/m³"]]
+    rows += [[T["zw"], _f(a.profile.zw) if math.isfinite(a.profile.zw)
+              else "Dry assumption", "m" if math.isfinite(a.profile.zw) else ""],
+             [T["gw"], _f(a.profile.gw), "kN/m³"]]
     parts.append(_kv_table(T, rows))
 
     parts.append(N.h3(T["sec_soil"]))
@@ -450,28 +495,21 @@ def _pile_section(T, L, a, figures, img_src, N: _Numbers) -> List[str]:
                 [T["T_all"], _f(t["T_all"], 0), "kN"], [T["T"], _f(t["T"], 0), "kN"]]
         if seismic["group"]:
             rows.append([T["block_up"], _f(seismic["group"]["T_all"], 0), "kN"])
+        if seismic.get("group_compression"):
+            rows.append([T["group_comp"], _f(seismic["group_compression"]["Q_all"], 0), "kN"])
         parts.append(_kv_table(T, rows))
 
     # ---------------------------------------------------------- checks
     parts.append(N.h2(T["sec_checks"]))
     checks = res["checks"]
-    rows = [[T["c_pile"], _f(checks["pile"]["actual"]), _f(checks["pile"]["allowable"]),
-             _status(T, checks["pile"]["status"])],
-            [T["c_group"], _f(checks["group"]["actual"]), _f(checks["group"]["allowable"]),
-             _status(T, checks["group"]["status"])],
-            [T["c_settle"], _f(checks["settlement"]["actual"], 1),
-             _f(checks["settlement"]["allowable"], 1), _status(T, checks["settlement"]["status"])]]
-    for key, label in (("seismic_compression", "c_seis_c"), ("seismic_tension", "c_seis_t"),
-                       ("seismic_group_tension", "c_seis_g")):
-        if key in checks:
-            c = checks[key]
-            rows.append([T[label], _f(c["actual"]), _f(c["allowable"]),
-                         _status(T, c["status"])])
-    parts.append(_table([T["check"], T["actual"], T["allowable"], T["status"]], rows,
-                        [40, 20, 20, 20]))
+    parts.append(_checks_table(T, checks))
     length = res["required_length"]
-    text = (L["res_required_length"].format(L=length, z=a.top + length) if math.isfinite(length)
-            else L["res_no_length"].format(hi=a.profile.depth - a.top))
+    if not res.get("length_search_performed", True):
+        text = L["res_length_not_searched"]
+    else:
+        text = (L["res_required_length"].format(L=length, z=a.top + length)
+                if math.isfinite(length)
+                else L["res_no_length"].format(hi=a.profile.depth - a.top))
     parts.append(f"<p>{_esc(text)}</p>")
 
     parts.append(N.h2(T["sec_figs"], page_break=True))
@@ -490,13 +528,15 @@ def _pile_section(T, L, a, figures, img_src, N: _Numbers) -> List[str]:
     return parts
 
 
-def _socket_section(T, L, s, figures, img_src, N: _Numbers, page_break: bool) -> List[str]:
+def _socket_section(T, L, s, figures, img_src, N: _Numbers, page_break: bool,
+                    shared_total_length=None) -> List[str]:
     res = s.results
     parts = [N.h2(T["sec_socket"], page_break=page_break), N.h3(T["sec_socket_in"])]
     m = res["modulus"]
     hb = res["hoek_brown"]
     parts.append(_kv_table(T, [
         [T["socket_D"], _f(s.D), "m"], [T["socket_Ls"], _f(res["Ls_check"]), "m"],
+        ["Total head-to-tip length checked", _f(s.overburden + res["Ls_check"]), "m"],
         [T["socket_top"], _f(s.top), "m"], [T["rock"], _f(s.rock_depth), "m"],
         [T["overburden"], _f(res["overburden"]), "m"], [T["socket_Q"], _f(s.Q, 0), "kN"],
         [T["Qs_soil"], _f(res.get("Qs_soil", 0.0), 0) if res.get("Qs_soil", 0.0) > 0
@@ -514,7 +554,8 @@ def _socket_section(T, L, s, figures, img_src, N: _Numbers, page_break: bool) ->
     for key in SOCKET_SIDE_METHODS:
         e = res["side"][key]
         rows.append([_esc(L["side_" + key] + (" *" if key == res["design"] else "")),
-                     _esc(e["formula"]), _f(e["fs"], 0), _f(e["Ls_req"]), _f(e["Q_all"], 0),
+                     _esc(e["formula"]), _f(e["fs"], 0), _f(e["Ls_design"], 0),
+                     _f(e["Q_all"], 0),
                      T["yes"] if e["in_range"] else T["no"]])
     parts.append(_table([T["correlation"], T["formula"], T["fs"], T["Ls_req"], T["Q_all"],
                          T["range"]], rows, [30, 22, 11, 12, 14, 11]))
@@ -527,17 +568,29 @@ def _socket_section(T, L, s, figures, img_src, N: _Numbers, page_break: bool) ->
 
     c = res["check"]
     parts.append(N.h3(T["sec_socket_design"]))
+    recommended = res["Ls_design"] if shared_total_length is None else shared_total_length
     parts.append(_kv_table(T, [
         [T["fs_design"], _f(res["fs_design"], 0), "kPa"],
         [T["qb_design"], _f(res["qb_design"] / 1000.0), "MPa"],
         [T["FS_side"], _f(s.FS_side), ""], [T["FS_base"], _f(s.FS_base), ""],
-        [T["Ls_need"], _f(res["Ls_req"]), "m"], [T["Ls_min"], _f(res["Ls_min"]), "m"],
-        [f"<b>{T['Ls_design']}</b>", f"<b>{_f(res['Ls_design'])}</b>", "m"],
+        [T["Ls_need"], _f(res["Ls_req_continuous"]), "m"],
+        [T["Ls_min"], _f(res["Ls_min"]), "m"],
+        [f"<b>{T['Ls_design'] if shared_total_length is None else 'Common recommended whole-metre total pile length'}</b>",
+         f"<b>{_f(recommended, 0)}</b>", "m"],
         [T["socket_Ls"], _f(res["Ls_check"]), "m"],
         [T["Qs_l"], _f(c["Qs"], 0), "kN"], [T["Qb_l"], _f(c["Qb"], 0), "kN"],
         [T["W"], _f(c["W"], 0), "kN"], [T["Qa"].split("=")[0].strip(), _f(c["Q_all"], 0), "kN"],
         [T["status"], _status(T, c["status"]), ""],
     ]))
+    parts.append(_checks_table(T, res["checks"]))
+    if shared_total_length is not None:
+        explanation = ("The recommendation above is the common total head-to-tip length checked "
+                       "in all boreholes. " if math.isfinite(shared_total_length)
+                       else "No common length is recommended. ")
+        parts.append(f"<p>{explanation}Correlation lengths in the side-shear table "
+                     "apply to this log individually.</p>")
+    if not math.isfinite(recommended):
+        parts.append(f"<p>{_esc(L['sock_no_length'])}</p>")
     se = res["settlement"]
     parts.append(N.h3(T["sec_socket_s"]))
     parts.append(_kv_table(T, [
@@ -546,6 +599,9 @@ def _socket_section(T, L, s, figures, img_src, N: _Numbers, page_break: bool) ->
         [T["base_share"], _f(100 * se["rw"]["base_share"], 1), "%"],
         [T["rw_side"], _f(1000 * se["rw_side"]["total"]), "mm"],
         [T["vesic"], _f(1000 * se["vesic"]["total"]), "mm"],
+        ["Settlement used in the check", _f(1000 * se["s"]), "mm"],
+        ["Selected settlement method", T[se["method"]], ""],
+        [T["s_allow"], _f(s.s_allow), "mm"],
     ]))
     parts.append(N.h3(T["sec_socket_figs"]))
     for key in SOCKET_PLOT_KEYS:
@@ -565,7 +621,20 @@ def _socket_section(T, L, s, figures, img_src, N: _Numbers, page_break: bool) ->
 def _spt_section(N: _Numbers, spt) -> List[str]:
     """The SPT records and the layers derived from them, with each value's source."""
     parts = [N.h2("Soil profile from the boreholes")]
-    zw = "none" if spt.water_depth is None else f"{_f(spt.water_depth)} m"
+    if hasattr(spt, "profiles"):
+        parts.append("<p>Each borehole is interpreted independently, with its own "
+                     "groundwater condition. Layers and parameters are not pooled "
+                     "between logs.</p>")
+        for profile in spt.profiles:
+            parts.extend(_spt_profile_section(N, profile))
+        return parts
+    parts.extend(_spt_profile_section(N, spt))
+    return parts
+
+
+def _spt_profile_section(N: _Numbers, spt) -> List[str]:
+    parts = [N.h3(f"Borehole: {spt.name}")]
+    zw = "dry assumption" if spt.water_depth is None else f"{_f(spt.water_depth)} m"
     parts.append(f"<p>Water table: {zw}. N60 = N·(ER/60)·CB·CS·CR (Skempton 1986); "
                  "(N1)60 = CN·N60, CN = √(pa/σ'v0) ≤ 1.7 (Liao &amp; Whitman 1986). "
                  "Tests in alike, adjacent depth ranges form one layer; laboratory "
@@ -601,6 +670,70 @@ def _spt_section(N: _Numbers, spt) -> List[str]:
     return parts
 
 
+def _envelope_section(T, L, analysis, figures, img_src, N: _Numbers) -> List[str]:
+    res = analysis.results
+    is_socket = res["pile_type"] == "socket"
+    length_label = "Common total head-to-tip length checked L"
+    parts = [N.h2("Borehole envelope and common design")]
+    parts.append("<p>Every borehole is analysed separately at the same pile geometry "
+                 "and load. For each check the largest utilisation governs; different "
+                 "checks may be governed by different boreholes. A design passes only "
+                 "when every active check passes in every log. Utilisation must be "
+                 "at most 1.000.</p>")
+    checked_length = _f(res["L"]) if res["L"] > 0 else "No common length selected"
+    parts.append(_kv_table(T, [["Number of boreholes", str(len(analysis.analyses)), ""],
+                               ["Common diameter D", _f(res["D"]), "m"],
+                               [length_label, checked_length, "m" if res["L"] > 0 else ""],
+                               ["Status at the checked length", _status(T, res["status"]), ""]]))
+    parts.append(N.h3("Controlling checks at the checked length"))
+    parts.append(_checks_table(T, res["checks"], boreholes=True))
+    parts.append(N.h3("Common recommended length"))
+    length = res["required_length"]
+    if not res.get("length_search_performed", True):
+        parts.append("<p>A common length search was not requested.</p>")
+    elif math.isfinite(length):
+        parts.append(f"<p><b>Common recommended whole-metre length: L = "
+                     f"{_f(length, 0)} m.</b> Every log was recalculated at this exact "
+                     "length and all active checks pass.</p>")
+        parts.append(_checks_table(T, res["design_checks"], boreholes=True))
+    else:
+        parts.append("<p><b>No common whole-metre length passes every active check "
+                     "within the available search range.</b></p>")
+    if is_socket:
+        parts.append(N.h3("Socket embedment in each borehole"))
+        parts.append("<p>The common length is measured from the pile head to its tip. "
+                     "Each socket embedment is calculated from that total length and "
+                     "the rock depth in its own log. These derived embedments may be "
+                     "fractional; the recommended total pile length is a whole metre.</p>")
+        rows = [[_esc(name), _f(child.rock_depth), _f(child.overburden),
+                 _f(res["checked_socket_lengths"].get(name)),
+                 _f(res["design_socket_lengths"].get(name))]
+                for name, child in analysis.analyses.items()]
+        parts.append(_table(["Borehole", "Rock depth (m)", "Overburden (m)",
+                             "Checked embedment (m)", "Embedment at common recommendation (m)"],
+                            rows, [24, 17, 17, 20, 22]))
+    parts.append("<p>The following sections preserve each borehole's own soil, "
+                 "water and rock conditions. Each section states its checked geometry. "
+                 "Individual correlation recommendations apply only to that log; "
+                 "the shared recommendation is reported above.</p>")
+    for index, (name, child) in enumerate(analysis.analyses.items()):
+        prefix = f"log{index}:"
+        child_figures = {key[len(prefix):]: value for key, value in figures.items()
+                         if key.startswith(prefix)}
+
+        def child_src(key, prefix=prefix):
+            return img_src(prefix + key)
+
+        parts.append(N.h2(f"Borehole: {name}", page_break=True))
+        if is_socket:
+            parts.extend(_socket_section(T, L, child, child_figures, child_src, N,
+                                         page_break=False, shared_total_length=length
+                                         if res.get("length_search_performed", True) else None))
+        else:
+            parts.extend(_pile_section(T, L, child, child_figures, child_src, N))
+    return parts
+
+
 def build_html(analysis, figures: Dict[str, bytes], img_src=None,
                socket=None, spt=None) -> str:
     """
@@ -609,8 +742,9 @@ def build_html(analysis, figures: Dict[str, bytes], img_src=None,
     and DOCX writers pass a `fig://<key>` mapper and resolve the keys against
     the figure dictionary themselves.
 
-    Either the pile analysis or the socket may be missing, not both. `spt`, a
-    `spt.SPTProfile`, adds the boreholes and the derivation of the layers.
+    The first argument accepts any result of ``pile.analyse``: a soil pile,
+    a socket or a borehole envelope. ``spt`` accepts an SPTProfile or an
+    SPTInvestigation and adds the records and independent layer derivations.
     """
     if analysis is None and socket is None:
         raise ValueError("nothing to report")
@@ -634,10 +768,19 @@ def build_html(analysis, figures: Dict[str, bytes], img_src=None,
     if spt is not None:
         parts.extend(_spt_section(N, spt))
     if analysis is not None:
-        parts.extend(_pile_section(T, L, analysis, figures, img_src, N))
+        if analysis.results.get("envelope"):
+            parts.extend(_envelope_section(T, L, analysis, figures, img_src, N))
+        elif analysis.config.get("pile_type") == "socket":
+            parts.extend(_socket_section(T, L, analysis, figures, img_src, N,
+                                         page_break=False))
+        else:
+            parts.extend(_pile_section(T, L, analysis, figures, img_src, N))
     if socket is not None:
-        parts.extend(_socket_section(T, L, socket, figures, img_src, N,
-                                     page_break=analysis is not None))
+        if socket.results.get("envelope"):
+            parts.extend(_envelope_section(T, L, socket, figures, img_src, N))
+        else:
+            parts.extend(_socket_section(T, L, socket, figures, img_src, N,
+                                         page_break=analysis is not None))
     parts.append("</body></html>")
     return "\n".join(parts)
 
@@ -669,7 +812,7 @@ def export_pdf(path: str, analysis, socket=None, spt=None) -> None:
 
 def export_report(path: str, analysis, socket=None, spt=None) -> None:
     """The calculation report, always as PDF; '.pdf' is added when missing.
-    `spt`: the `spt.SPTProfile` the soil profile came from, to report it."""
+    `spt`: the SPTProfile or SPTInvestigation used to derive the logs."""
     if not path.lower().endswith(".pdf"):
         path = f"{path}.pdf"
     export_pdf(path, analysis, socket, spt)

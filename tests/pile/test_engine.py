@@ -107,13 +107,70 @@ def test_the_required_length_is_the_first_that_passes():
     cfg["loading"]["Q"] = 800.0
     a = analyse(cfg)
     L = a.results["required_length"]
-    assert math.isfinite(L)
+    assert math.isfinite(L) and float(L).is_integer()
     curve = {round(p["L"], 6): p for p in a.results["length_curve"]}
     assert curve[round(L, 6)]["utilisation"] <= 1.0
-    assert curve[round(L - a.L_step, 6)]["utilisation"] > 1.0
+    previous = curve[round(L - 1.0, 6)]
+    assert max(previous["utilisation"], previous["utilisation_group"],
+               previous["utilisation_settlement"], previous["utilisation_seismic"]) > 1.0
     trial = copy.deepcopy(cfg)
     trial["pile"]["L"] = L
-    assert PileAnalysis(trial).run(with_length=False)["utilisation"] <= 1.0
+    checks = PileAnalysis(trial).run(with_length=False)["checks"]
+    assert all(check["status"] in {"OK", "N/A"} for check in checks.values())
+
+
+def test_required_length_includes_the_settlement_limit():
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
+    cfg["loading"]["Q"] = 4000.0
+    cfg["seismic"]["enabled"] = False
+    # The previous capacity-only answer was 6.5 m, settling 74.2 mm against
+    # the default 40 mm limit. Its ceiling (7 m) also fails settlement.
+    cfg["pile"]["L"] = 6.5
+    a = analyse(cfg)
+    assert a.results["checks"]["pile"]["status"] == "OK"
+    assert a.results["checks"]["group"]["status"] == "OK"
+    assert a.results["checks"]["settlement"]["status"] == "NOT OK"
+    assert a.results["checks"]["settlement"]["actual"] == pytest.approx(74.21135233407199)
+    assert a.results["required_length"] == 9
+    cfg["pile"]["L"] = a.results["required_length"]
+    safe = analyse(cfg, with_length=False).results
+    assert all(check["status"] in {"OK", "N/A"} for check in safe["checks"].values())
+    assert safe["checks"]["settlement"]["utilisation"] == pytest.approx(
+        safe["checks"]["settlement"]["actual"] / 40.0)
+
+
+def test_integer_length_is_rechecked_when_rounding_enters_a_weak_layer():
+    cfg = one_layer("granular", phi=36.0, E=50.0, N60=40.0)
+    sand = cfg["soil_profile"][0]
+    clay = {**sand, "name": "Weak clay", "behaviour": "cohesive", "phi": 20.0,
+            "cu": 5.0, "E": 10.0, "N60": 0.0}
+    cfg["soil_profile"] = [
+        {**sand, "thickness": 10.8}, {**clay, "thickness": 1.2},
+        {**sand, "thickness": 28.0},
+    ]
+    cfg["pile"]["L"] = 10.22
+    cfg["criteria"]["L_min"] = 10.22
+    cfg["loading"]["Q"] = 800.0
+    a = analyse(cfg)
+    assert a.results["L"] == 10.22  # an entered fractional length is preserved
+    assert all(check["status"] == "OK" for check in a.results["checks"].values())
+    curve = {point["L"]: point for point in a.results["length_curve"]}
+    assert curve[11]["utilisation"] > 1.0
+    assert a.results["required_length"] == 12  # ceil(10.22) is not a safe design
+    cfg["pile"]["L"] = 12
+    assert all(check["status"] == "OK" for check in
+               analyse(cfg, with_length=False).results["checks"].values())
+
+
+def test_no_integer_recommendation_extends_past_the_investigated_profile():
+    cfg = one_layer(thickness=10.8)
+    cfg["pile"]["L"] = 10.22
+    cfg["criteria"]["L_min"] = 10.22
+    cfg["loading"]["Q"] = 10.0
+    result = analyse(cfg).results
+    assert result["checks"]["pile"]["status"] == "OK"
+    assert result["length_curve"] == []
+    assert math.isnan(result["required_length"])
 
 
 def test_no_length_is_reported_as_such():
@@ -187,6 +244,36 @@ def test_the_cap_shares_the_seismic_load_by_hand():
                                        + 4000.0 * p["y"] / syy)
     assert sum(p["P"] for p in loads) == pytest.approx(9000.0)
     assert sum(p["P"] * p["x"] for p in loads) == pytest.approx(10000.0)
+    assert sum(p["P"] * p["y"] for p in loads) == pytest.approx(4000.0)
+
+
+@pytest.mark.parametrize("nx, ny, moment, axis", [
+    (1, 3, "M_B", "B"), (3, 1, "M_L", "L"),
+    (1, 1, "M_B", "B"), (1, 1, "M_L", "L"),
+])
+def test_a_seismic_moment_without_an_axial_lever_arm_is_rejected(nx, ny, moment, axis):
+    cfg = seismic_case(V=300.0, M_B=0.0, M_L=0.0)
+    cfg["group"].update(nx=nx, ny=ny)
+    cfg["seismic"][moment] = 100000.0
+    with pytest.raises(PileError) as caught:
+        PileAnalysis(cfg)
+    assert caught.value.key == "err_seismic_moment"
+    assert caught.value.params["axis"] == axis
+    cfg["seismic"]["enabled"] = False
+    assert analyse(cfg, with_length=False).results["seismic"] is None
+
+
+def test_seismic_group_compression_cannot_pass_on_individual_capacities_alone():
+    cfg = seismic_case(V=24709.080608388136, M_B=0.0, M_L=0.0)
+    cfg["loading"]["Q"] = 100.0
+    res = analyse(cfg, with_length=False).results
+    assert res["checks"]["group"]["status"] == "OK"  # static case
+    assert res["checks"]["seismic_compression"]["status"] == "OK"
+    group = res["seismic"]["group_compression"]
+    assert group["Q_all"] == pytest.approx(20651.716278608223)
+    assert group["utilisation"] == pytest.approx(1.1964662052801236)
+    assert res["checks"]["seismic_group_compression"]["status"] == "NOT OK"
+    assert res["seismic"]["utilisation"] == pytest.approx(group["utilisation"])
 
 
 def test_the_uplift_capacity_by_hand():
@@ -203,6 +290,7 @@ def test_the_uplift_capacity_by_hand():
     assert t["FS"] == pytest.approx(t["Qs"] / (300.0 - t["W"]))
     assert res["checks"]["seismic_tension"]["status"] == "OK"
     assert res["seismic"]["group"] is None       # a single pile has no block
+    assert res["seismic"]["group_compression"] is None
 
 
 def test_clay_keeps_its_whole_shaft_friction_in_tension():
@@ -233,6 +321,7 @@ def test_a_lifted_group_is_checked_as_a_block():
     assert g is not None and g["T"] == pytest.approx(3000.0)
     assert g["T_all"] == pytest.approx(g["Qs"] / 2.0 + g["W"])
     assert "seismic_group_tension" in res["checks"]
+    assert res["checks"]["seismic_group_compression"]["status"] == "N/A"
 
 
 def test_the_seismic_checks_lengthen_the_pile_when_they_govern():
@@ -268,3 +357,38 @@ def test_a_tip_on_a_layer_boundary_is_flagged():
     deeper = {**DEFAULT_CONFIG, "pile": {**DEFAULT_CONFIG["pile"], "L": 24.0}}
     assert not any(w[0] == "warn_tip_embedment"
                    for w in analyse(deeper).results["warnings"])
+
+
+def test_repeated_runs_do_not_accumulate_trial_or_previous_warnings():
+    a = PileAnalysis(DEFAULT_CONFIG)
+    first = a.run(with_length=False)
+    warnings = copy.deepcopy(first["warnings"])
+    second = a.run(with_length=True)
+    assert second["warnings"] == warnings
+    assert first["warnings"] == warnings
+
+
+def test_no_water_table_means_dry_stresses_and_full_pile_weight():
+    cfg = one_layer("granular")
+    cfg["groundwater"]["depth"] = None
+    a = PileAnalysis(cfg)
+    res = a.run(with_length=False)
+    assert math.isinf(a.profile.zw)
+    assert a.profile.effective_stress(15.0) == pytest.approx(18.0 * 15.0)
+    assert res["W"] == pytest.approx(25.0 * math.pi * 0.6 ** 2 / 4.0 * 15.0)
+
+
+def test_the_soil_constructor_refuses_a_socket_configuration():
+    cfg = {**DEFAULT_CONFIG, "pile_type": "socket"}
+    with pytest.raises(PileError) as caught:
+        PileAnalysis(cfg)
+    assert caught.value.key == "err_pile_type"
+
+
+def test_the_soil_constructor_cannot_silently_ignore_boreholes():
+    cfg = one_layer()
+    cfg["boreholes"] = [{"name": "BH-1", "soil_profile": cfg["soil_profile"]}]
+    with pytest.raises(PileError) as caught:
+        PileAnalysis(cfg)
+    assert caught.value.key == "err_config"
+    assert caught.value.params["field"] == "boreholes"
